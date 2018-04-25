@@ -37,6 +37,7 @@
 #include "Initializer.h"
 #include "MapDrawer.h"
 #include "System.h"
+#include <DepthEstimation/DepthEstimator.h>
 
 #include <mutex>
 
@@ -95,6 +96,7 @@ public:
     // Current Frame
     Frame mCurrentFrame;
     cv::Mat mImGray;
+    cv::Mat mImColor;
 
     // Initialization Variables (Monocular)
     std::vector<int> mvIniLastMatches;
@@ -183,12 +185,14 @@ protected:
 
     //Calibration matrix
     cv::Mat mK;
+    cv::Mat mInvK;
     cv::Mat mDistCoef;
     float mbf;
 
     //New KeyFrame rules (according to fps)
     int mMinFrames;
     int mMaxFrames;
+    float mFPS;
 
     // Threshold close/far points
     // Points seen as close by the stereo/RGBD sensor are considered reliable
@@ -214,6 +218,11 @@ protected:
     bool mbRGB;
 
     list<MapPoint*> mlpTemporalPoints;
+
+    // Square of camera pixel noise.
+    float mCameraPixelNoise2;
+
+    cnn_slam::DepthEstimator *mpDepthEstimator;
 };
 
 } //namespace ORB_SLAM

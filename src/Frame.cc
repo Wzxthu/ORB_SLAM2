@@ -28,7 +28,7 @@ namespace ORB_SLAM2
 
 long unsigned int Frame::nNextId=0;
 bool Frame::mbInitialComputations=true;
-float Frame::cx, Frame::cy, Frame::fx, Frame::fy, Frame::invfx, Frame::invfy;
+float Frame::cx, Frame::cy, Frame::fx, Frame::fy, Frame::invfx, Frame::invfy, Frame::focalLength;
 float Frame::mnMinX, Frame::mnMinY, Frame::mnMaxX, Frame::mnMaxY;
 float Frame::mfGridElementWidthInv, Frame::mfGridElementHeightInv;
 

@@ -1,3 +1,13 @@
+# CNN models
+*.ckpt*
+
+# Clion files
+cmake-build-debug
+.idea
+
+# Compiled python files
+*.pyc
+
 CMakeLists.txt.user
 Examples/Monocular/mono_euroc
 Examples/Monocular/mono_kitti

@@ -30,7 +30,7 @@
 #include "KeyFrameDatabase.h"
 
 #include <mutex>
-
+#include "DepthEstimation/DepthEstimator.h"
 
 namespace ORB_SLAM2
 {
@@ -44,6 +44,9 @@ class KeyFrame
 {
 public:
     KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+
+    void EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength);
+    void SelectHighGradientPoints(cv::Mat im);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -119,6 +122,17 @@ public:
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
+    // Dense depth map.
+    cv::Mat mDepthMap;
+    cv::Mat mUncertaintyMap;
+    float mMeanUncertainty;
+
+    // Selected high gradient points and their data.
+    cv::Mat mHighGradPtHomo2dCoord; // Nx3 float.
+    cv::Mat mHighGradPtPixels;      // Nx3 uchar.
+    cv::Mat mHighGradPtDepth;       // Nx1 float.
+    cv::Mat mHighGradPtUncertainty; // Nx1 float.
+    cv::Mat mHighGradPtSqrtUncertainty; // Nx1 float.
 
     static long unsigned int nNextId;
     long unsigned int mnId;
@@ -187,6 +201,7 @@ public:
     const int mnMaxX;
     const int mnMaxY;
     const cv::Mat mK;
+    const cv::Mat mInvK;
 
 
     // The following variables need to be accessed trough a mutex to be thread safe.

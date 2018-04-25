@@ -116,6 +116,7 @@ public:
     static float cy;
     static float invfx;
     static float invfy;
+    static float focalLength;
     cv::Mat mDistCoef;
 
     // Stereo baseline multiplied by fx.

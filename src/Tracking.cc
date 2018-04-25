@@ -29,6 +29,7 @@
 #include"Converter.h"
 #include"Map.h"
 #include"Initializer.h"
+#include <Tracking/PoseEstimation.h>
 
 #include"Optimizer.h"
 #include"PnPsolver.h"
@@ -49,6 +50,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
 {
+//    mpDepthEstimator = new cnn_slam::DepthEstimator;
+//    mpDepthEstimator->Initialize();
+
     // Load camera parameters from settings file
 
     cv::FileStorage fSettings(strSettingPath, cv::FileStorage::READ);
@@ -63,6 +67,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     K.at<float>(0,2) = cx;
     K.at<float>(1,2) = cy;
     K.copyTo(mK);
+    mInvK = mK.inv();
 
     cv::Mat DistCoef(4,1,CV_32F);
     DistCoef.at<float>(0) = fSettings["Camera.k1"];
@@ -82,6 +87,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     float fps = fSettings["Camera.fps"];
     if(fps==0)
         fps=30;
+    mFPS = fps;
 
     // Max/Min Frames to insert keyframes and to check relocalisation
     mMinFrames = 0;
@@ -238,7 +244,7 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
 
 cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
 {
-    mImGray = im;
+    mImGray = im.clone();
 
     if(mImGray.channels()==3)
     {
@@ -254,6 +260,19 @@ cv::Mat Tracking::GrabImageMonocular(const cv::Mat &im, const double &timestamp)
         else
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
+
+    // Change the channel order to RGB to fit the depth prediction network.
+    mImColor = im;
+    if (mImColor.channels() == 3) {
+        if (!mbRGB)
+            cvtColor(mImColor, mImColor, CV_BGR2RGB);
+    } else if (mImColor.channels() == 4) {
+        if (mbRGB)
+            cvtColor(mImColor, mImColor, CV_RGBA2RGB);
+        else
+            cvtColor(mImColor, mImColor, CV_BGRA2RGB);
+    } else
+        cvtColor(mImColor, mImColor, CV_GRAY2RGB);
 
     if(mState==NOT_INITIALIZED || mState==NO_IMAGES_YET)
         mCurrentFrame = Frame(mImGray,timestamp,mpIniORBextractor,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
