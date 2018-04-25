@@ -154,8 +154,6 @@ namespace cnn_slam {
             memcpy(residual, regRes.data, sizeof(T) * regRes.rows);
 
             cv::pow(regRes, 2, regRes);
-//            cout << RotationAngle(Rt.t()) << ' ' << Mat(1, 3, CV_64F, (void *) t) << ' ' << sum(regRes)[0] << endl;
-
             return true;
         }
     };
@@ -202,7 +200,7 @@ namespace cnn_slam {
         options.num_threads = thread::hardware_concurrency();   // Use all cores.
         options.max_solver_time_in_seconds = max_seconds; // Enforce real-time.
         Solver::Summary summary;
-        cout << "Solving..." << endl << flush;
+//        cout << "Solving..." << endl << flush;
         ceres::Solve(options, &problem, &summary);
         cout << "Solver finished with final cost " << summary.final_cost << "!" << endl << flush;
 

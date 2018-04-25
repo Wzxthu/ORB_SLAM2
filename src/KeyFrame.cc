@@ -63,7 +63,7 @@ inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor, int numPt) {
     // Recover original coordinates and extract data.
     Mat highGradPtHomo2dCoord = Mat::ones(numPt, 3, CV_32F);
     highGradPtHomo2dCoord.col(2) = Mat::ones(numPt, 1, CV_32F);
-//#pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < numPatch; ++i) {
         int x = gradCoord[i].second.x << 2;
         int y = gradCoord[i].second.y << 2;
@@ -134,14 +134,14 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
 
     // Estimate depth.
     pDepthEstimator->EstimateDepth(imColor, mDepthMap, focalLength);
-//    imwrite("image.jpg", imColor);
+    imwrite("image.jpg", imColor);
     Mat depthDisplay;
     double minDepth, maxDepth;
     cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
 //    cout << "Min depth: " << minDepth << "; Max depth: " << maxDepth << "." << endl;
     depthDisplay = mDepthMap / maxDepth * 255;
     depthDisplay.convertTo(depthDisplay, CV_8U);
-//    imwrite("depth.jpg", depthDisplay);
+    imwrite("depth.jpg", depthDisplay);
 
 //    cout << "Depth image saved!" << endl;
 
@@ -207,7 +207,7 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         // Reshape back to same as the depth map.
         mUncertaintyMap = mUncertaintyMap.reshape(0, mDepthMap.rows);
     } else {
-        cout << "No previous keyframe given." << endl << flush;
+//        cout << "No previous keyframe given." << endl << flush;
 
         cv::pow(mDepthMap, 2, mUncertaintyMap);
         mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
@@ -219,7 +219,7 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
     mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
     mHighGradPtSqrtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
-//#pragma omp parallel for
+#pragma omp parallel for
     for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i) {
         int x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
         int y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));

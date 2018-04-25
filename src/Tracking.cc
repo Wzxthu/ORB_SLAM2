@@ -925,6 +925,12 @@ bool Tracking::TrackWithMotionModel()
 
     // Optimize frame pose with all matches
     Optimizer::PoseOptimization(&mCurrentFrame);
+    cv::Mat Tcw;
+    cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+    cout << "Adjustment: ";
+    cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
+    mCurrentFrame.SetPose(Tcw);
 
     // Discard outliers
     int nmatchesMap = 0;
@@ -967,6 +973,12 @@ bool Tracking::TrackLocalMap()
 
     // Optimize Pose
     Optimizer::PoseOptimization(&mCurrentFrame);
+    cv::Mat Tcw;
+    cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+    cout << "Adjustment: ";
+    cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
+    mCurrentFrame.SetPose(Tcw);
     mnMatchesInliers = 0;
 
     // Update MapPoints Statistics
