@@ -796,10 +796,12 @@ bool Tracking::TrackReferenceKeyFrame()
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
     Optimizer::PoseOptimization(&mCurrentFrame);
-//    cv::Mat Tcw;
-//    cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mCurrentFrame.mpReferenceKF, mCameraPixelNoise2,
-//                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
-//    mCurrentFrame.SetPose(Tcw);
+    cv::Mat Tcw;
+    cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+    cout << "Adjustment: ";
+    cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
+    mCurrentFrame.SetPose(Tcw);
 
     // Discard outliers
     int nmatchesMap = 0;

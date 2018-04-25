@@ -32,6 +32,18 @@
 
 namespace cnn_slam {
 
+    inline float RotationAngle(const cv::Mat &R) {
+        return static_cast<float>(std::acos((trace(R)[0] - 1) / 2));
+    }
+
+    inline float TranslationDist(const cv::Mat &t) {
+        return static_cast<float>(cv::norm(t));
+    }
+
+    inline void PrintRotTrans(const cv::Mat &T) {
+        std::cout << RotationAngle(T.colRange(0, 3).rowRange(0, 3)) << ' ' << TranslationDist(T.col(3).rowRange(0, 3)) << endl;
+    }
+
     float EstimateCameraPose(const cv::Mat &imColor,
                              const cv::Mat &K,
                              const cv::Mat &invK,

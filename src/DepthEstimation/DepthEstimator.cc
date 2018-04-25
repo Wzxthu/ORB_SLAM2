@@ -104,7 +104,7 @@ namespace cnn_slam {
         {
             std::unique_lock<mutex> lock(mForwardMutex);
 
-            cout << "Starting depth prediction!" << endl << flush;
+//            cout << "Starting depth prediction!" << endl << flush;
 
             int ori_rows = im.rows;
             int ori_cols = im.cols;
@@ -117,7 +117,7 @@ namespace cnn_slam {
 
             PyObject *func_name = PyString_FromString("depth_predict");
 
-            cout << "Forwarding network..." << endl;
+//            cout << "Forwarding network..." << endl;
             PyObject *pRetVal = PyObject_CallMethodObjArgs(mpInstance, func_name, pParm, NULL);
             if (!pRetVal) {
                 cerr << "Error during calling depth estimation function!" << endl;
@@ -137,7 +137,7 @@ namespace cnn_slam {
 
             depth = pred * mDepthRatio * focalLength / mTrainingFocalLength;
 
-            cout << "Finished depth prediction!" << endl << flush;
+//            cout << "Finished depth prediction!" << endl << flush;
         }
     }
 

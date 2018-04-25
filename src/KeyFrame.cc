@@ -111,8 +111,6 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
 
     SetPose(F.mTcw);
 
-    cout << "Focal length: " << focalLength << endl;
-
     if (!imColor.empty() and pDepthEstimator) {
         mHighGradPtHomo2dCoord = SelectHighGradientPoints(imColor, cnn_slam::TRACKING_NUM_PT);
 
@@ -136,43 +134,54 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
 
     // Estimate depth.
     pDepthEstimator->EstimateDepth(imColor, mDepthMap, focalLength);
-    imwrite("image.jpg", imColor);
+//    imwrite("image.jpg", imColor);
     Mat depthDisplay;
     double minDepth, maxDepth;
     cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
-    cout << "Min depth: " << minDepth << "; Max depth: " << maxDepth << "." << endl;
+//    cout << "Min depth: " << minDepth << "; Max depth: " << maxDepth << "." << endl;
     depthDisplay = mDepthMap / maxDepth * 255;
     depthDisplay.convertTo(depthDisplay, CV_8U);
-    imwrite("depth.jpg", depthDisplay);
+//    imwrite("depth.jpg", depthDisplay);
+
+//    cout << "Depth image saved!" << endl;
 
     // Estimate uncertainty map.
-    if (pPrevKF) {
+    if (pPrevKF && !pPrevKF->GetPose().empty()) {
         // Calculate projected 2D location in the current frame
         // of the high gradient points in the reference keyframe.
         Mat depthVec = mDepthMap.reshape(0, mDepthMap.rows * mDepthMap.cols);
 
         Mat vertices(depthVec.rows, 3, CV_32F);
-//#pragma omp parallel for
+#pragma omp parallel for
         for (int i = 0; i < mDepthMap.rows; ++i) {
             int row_cnt = i * mDepthMap.cols;
             for (int j = 0; j < mDepthMap.cols; ++j)
-                vertices.row(row_cnt++) = (Mat_<float>(1, 3) << i, j, 1) * mDepthMap.at<float>(i, j);
+                vertices.row(row_cnt++) = (Mat_<float>(1, 3) << j, i, 1) * mDepthMap.at<float>(i, j);
         }
+//        cout << "Vertices prepared!" << endl << flush;
+//        cout << pPrevKF->GetPose().type() << ' ' << GetPoseInverse().type() << ' ' << CV_32F << endl << flush;
+
         Mat Trel = pPrevKF->GetPose() * GetPoseInverse();
+//        cout << Trel << endl;
+//        cout << vertices.type() << ' ' << mInvK.type() << ' ' << Trel.type() << ' ' << pPrevKF->mK.type() << endl;
         vertices = (vertices * mInvK.t() * Trel.rowRange(0, 3).colRange(0, 3).t()
                     + repeat(Trel.col(3).rowRange(0, 3).t(), vertices.rows, 1)) * pPrevKF->mK.t();
         Mat proj2d = vertices.colRange(0, 2) / repeat(vertices.col(2), 1, 2);
         assert(proj2d.cols == 2);
         proj2d.convertTo(proj2d, CV_32S);
 
+//        cout << "proj2d finished!" << endl << flush;
+
         Mat valid = proj2d.col(0) >= 0;
         bitwise_and(valid, proj2d.col(0) < pPrevKF->mDepthMap.cols, valid, valid);
         bitwise_and(valid, proj2d.col(1) >= 0, valid, valid);
         bitwise_and(valid, proj2d.col(1) < pPrevKF->mDepthMap.rows, valid, valid);
 
+//        cout << "Valid count: " << sum(valid)[0] / 255 << endl << flush;
+
         // Estimate uncertainty on each valid point.
         mUncertaintyMap = Mat(mDepthMap.rows * mDepthMap.cols, 1, CV_32F);
-//#pragma omp parallel for
+#pragma omp parallel for
         for (int i = 0; i < valid.rows; ++i)
             if (valid.at<uchar>(i)) {
                 auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1),
@@ -198,15 +207,19 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         // Reshape back to same as the depth map.
         mUncertaintyMap = mUncertaintyMap.reshape(0, mDepthMap.rows);
     } else {
+        cout << "No previous keyframe given." << endl << flush;
+
         cv::pow(mDepthMap, 2, mUncertaintyMap);
         mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     }
+
+//    cout << "Selecting high grad" << endl;
 
     mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
     mHighGradPtSqrtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
-#pragma omp parallel for
+//#pragma omp parallel for
     for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i) {
         int x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
         int y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
@@ -215,6 +228,8 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         mHighGradPtPixels.row(i) = imColor.col(x).row(y).reshape(1, 3);
     }
     sqrt(mHighGradPtUncertainty, mHighGradPtSqrtUncertainty);
+
+//    cout << "Quiting depth estimation..." << endl;
 
     mbDepthReady = true;
     mbWorking = false;
@@ -234,7 +249,10 @@ void KeyFrame::ComputeBoW()
 void KeyFrame::SetPose(const cv::Mat &Tcw_)
 {
     unique_lock<mutex> lock(mMutexPose);
-    Tcw_.copyTo(Tcw);
+    if (Tcw_.type() == CV_32F)
+        Tcw_.copyTo(Tcw);
+    else
+        Tcw_.convertTo(Tcw, CV_32F);
     cv::Mat Rcw = Tcw.rowRange(0,3).colRange(0,3);
     cv::Mat tcw = Tcw.rowRange(0,3).col(3);
     cv::Mat Rwc = Rcw.t();

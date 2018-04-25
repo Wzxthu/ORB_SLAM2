@@ -45,14 +45,6 @@ namespace cnn_slam {
     // Use ceres for Gaussian-Newton optimization.
     using namespace ceres;
 
-    inline float RotationAngle(const cv::Mat &R) {
-        return static_cast<float>(std::acos((trace(R)[0] - 1) / 2));
-    }
-
-    inline float TranslationDist(const cv::Mat &t) {
-        return static_cast<float>(cv::norm(t));
-    }
-
     struct CostFunctor {
         Mat imColor;
         ORB_SLAM2::KeyFrame *pRefKF;
@@ -162,7 +154,7 @@ namespace cnn_slam {
             memcpy(residual, regRes.data, sizeof(T) * regRes.rows);
 
             cv::pow(regRes, 2, regRes);
-            cout << RotationAngle(Rt.t()) << ' ' << Mat(1, 3, CV_64F, (void *) t) << ' ' << sum(regRes)[0] << endl;
+//            cout << RotationAngle(Rt.t()) << ' ' << Mat(1, 3, CV_64F, (void *) t) << ' ' << sum(regRes)[0] << endl;
 
             return true;
         }
@@ -210,9 +202,9 @@ namespace cnn_slam {
         options.num_threads = thread::hardware_concurrency();   // Use all cores.
         options.max_solver_time_in_seconds = max_seconds; // Enforce real-time.
         Solver::Summary summary;
-        cout << "Solving..." << endl;
+        cout << "Solving..." << endl << flush;
         ceres::Solve(options, &problem, &summary);
-        cout << "Solver finished with final cost " << summary.final_cost << "!" << endl;
+        cout << "Solver finished with final cost " << summary.final_cost << "!" << endl << flush;
 
         Mat Rrel;
         Rodrigues(Mat(1, 3, CV_64F, relRotationRodrigues), Rrel);
