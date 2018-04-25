@@ -39,6 +39,7 @@ namespace cnn_slam {
                              float cameraPixelNoise2,
                              double max_seconds,
                              cv::Mat &Tcw,
+                             const cv::Mat initialTcw = cv::Mat(),
                              float *rotAngle = nullptr,
                              float *transDist = nullptr,
                              float *validRatio = nullptr);

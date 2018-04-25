@@ -43,10 +43,15 @@ class KeyFrameDatabase;
 class KeyFrame
 {
 public:
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB,
+             cv::Mat imColor = cv::Mat(),
+             cnn_slam::DepthEstimator *pDepthEstimator = nullptr,
+             KeyFrame *pPrevKF = nullptr,
+             float focalLength = 0);
 
-    void EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength);
-    void SelectHighGradientPoints(cv::Mat im);
+    ~KeyFrame();
+
+    void EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -126,7 +131,7 @@ public:
     cv::Mat mDepthMap;
     cv::Mat mUncertaintyMap;
     float mMeanUncertainty;
-
+    bool mbDepthReady;
     // Selected high gradient points and their data.
     cv::Mat mHighGradPtHomo2dCoord; // Nx3 float.
     cv::Mat mHighGradPtPixels;      // Nx3 uchar.
@@ -246,6 +251,8 @@ protected:
     std::mutex mMutexPose;
     std::mutex mMutexConnections;
     std::mutex mMutexFeatures;
+
+    bool mbWorking;
 };
 
 } //namespace ORB_SLAM

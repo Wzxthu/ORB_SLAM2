@@ -30,11 +30,12 @@
 #include <python2.7/tupleobject.h>
 
 #include <thread>
+#include <mutex>
 
 using namespace std;
 
 namespace cnn_slam {
-    DepthEstimator::DepthEstimator(): mInitialized(false) {
+    DepthEstimator::DepthEstimator() : mInitialized(false) {
         mHeight = 228;
         mWidth = 304;
         mTrainingFocalLength = sqrt(powf(5.1885790117450188e+02f, 2) + powf(5.1946961112127485e+02f, 2));
@@ -48,7 +49,7 @@ namespace cnn_slam {
         if (mInitialized)
             return;
 
-        thread init_thread([this](){
+        thread init_thread([this]() {
             cout << "Initializing depth estimator asynchronously..." << endl;
 
             Py_Initialize();
@@ -75,13 +76,13 @@ namespace cnn_slam {
                 exit(-1);
             }
 
-            PyObject * pClass = PyObject_GetAttrString(mpModule, "Predict");
+            PyObject *pClass = PyObject_GetAttrString(mpModule, "Predict");
             if (!pClass) {
                 cerr << "Cannot import class \"Predict\"" << endl;
                 exit(-1);
             }
-            PyObject * init_arg = PyString_FromString(mModelPath);
-            PyObject * args = PyTuple_Pack(1, init_arg);
+            PyObject *init_arg = PyString_FromString(mModelPath);
+            PyObject *args = PyTuple_Pack(1, init_arg);
             mpInstance = PyInstance_New(pClass, args, nullptr);
             if (!mpInstance) {
                 cerr << "Cannot create instance!" << endl;
@@ -95,59 +96,49 @@ namespace cnn_slam {
         init_thread.detach();
     }
 
-    cv::Mat DepthEstimator::EstimateDepth(cv::Mat img, float focalLength) {
+    void DepthEstimator::EstimateDepth(const cv::Mat& im,
+                                       cv::Mat& depth,
+                                       float focalLength) {
         while (!mInitialized)
             std::this_thread::sleep_for(std::chrono::milliseconds(10));
+        {
+            std::unique_lock<mutex> lock(mForwardMutex);
 
-//        cout << "Start estimating depth..." << endl << flush;
+            cout << "Starting depth prediction!" << endl << flush;
 
-        // the parameter to the function, which is a string of the picture's path
-        //char *picpath = "/home/manchen/CLionProjects/untitled/FCRN-DepthPrediction/images/input/image_ex.png";
-        //char *modelpath = "../FCRN-DepthPrediction/NYU_FCRN.ckpt";
-        //cv::Mat img = cv::imread(picpath, CV_LOAD_IMAGE_UNCHANGED);
-        //int height = 228;
-        //int width = 304;
-        int ori_rows = img.rows;
-        int ori_cols = img.cols;
-        resize(img, img, cv::Size(mWidth, mHeight), 0, 0, CV_INTER_LINEAR);
-        //int len = img.rows*img.cols*3;
-        //img = img.reshape(1, len);
-        unsigned char *data = img.data;
-        npy_intp Dims[3] = {img.rows, img.cols, 3};
-        PyObject * PyArray = PyArray_SimpleNewFromData(3, Dims, NPY_UBYTE, data);
-        img.addref();
-        //PyTuple_SetItem(pParm, 0, Py_BuildValue("s", picpath));
-        PyObject * pParm = PyTuple_Pack(1, PyArray);
+            int ori_rows = im.rows;
+            int ori_cols = im.cols;
+            cv::Mat input;
+            resize(im, input, cv::Size(mWidth, mHeight), 0, 0, CV_INTER_LINEAR);
+            unsigned char *data = input.data;
+            npy_intp Dims[3] = {input.rows, input.cols, 3};
+            PyObject *PyArray = PyArray_SimpleNewFromData(3, Dims, NPY_UBYTE, data);
+            PyObject *pParm = PyTuple_Pack(1, PyArray);
 
-        // run the python file
-        PyObject * func_name = PyString_FromString("depth_predict");
+            PyObject *func_name = PyString_FromString("depth_predict");
 
-//        cout << "Calling depth estimation function..." << endl << flush;
-        PyObject * pRetVal = PyObject_CallMethodObjArgs(mpInstance, func_name, pParm, NULL);
-        if (!pRetVal) {
-            cerr << "Error during calling depth estimation function!" << endl;
-            exit(-1);
+            cout << "Forwarding network..." << endl;
+            PyObject *pRetVal = PyObject_CallMethodObjArgs(mpInstance, func_name, pParm, NULL);
+            if (!pRetVal) {
+                cerr << "Error during calling depth estimation function!" << endl;
+                exit(-1);
+            }
+
+            // parse the return value into a opencv mat
+            PyArrayObject *Pynp_ret = (PyArrayObject *) PyArray_FromAny(pRetVal, PyArray_DescrFromType(NPY_FLOAT32), 2,
+                                                                        2,
+                                                                        NPY_ARRAY_CARRAY, NULL);
+            cv::Mat pred(PyArray_DIM(Pynp_ret, 0), PyArray_DIM(Pynp_ret, 1), CV_32F, PyArray_DATA(Pynp_ret));
+            resize(pred, pred, cv::Size(ori_cols, ori_rows), 0, 0, CV_INTER_LINEAR);
+            Py_DECREF(pParm);
+            Py_DECREF(PyArray);
+            Py_DECREF(pRetVal);
+            Py_DECREF(Pynp_ret);
+
+            depth = pred * mDepthRatio * focalLength / mTrainingFocalLength;
+
+            cout << "Finished depth prediction!" << endl << flush;
         }
-//        cout << "Depth estimation function returned!" << endl << flush;
-
-        // parse the return value into a opencv mat
-        //PyArrayObject *Pynp_ret = reinterpret_cast<PyArrayObject*>(pRetVal);
-//        cout << "Parsing return value..." << endl << flush;
-        PyArrayObject *Pynp_ret = (PyArrayObject *) PyArray_FromAny(pRetVal, PyArray_DescrFromType(NPY_FLOAT32), 2, 2,
-                                                                    NPY_ARRAY_CARRAY, NULL);
-//        cout << "Return value parsed!" << endl << flush;
-        cv::Mat depth(PyArray_DIM(Pynp_ret, 0), PyArray_DIM(Pynp_ret, 1), CV_32F, PyArray_DATA(Pynp_ret));
-        resize(depth, depth, cv::Size(ori_cols, ori_rows), 0, 0, CV_INTER_LINEAR);
-        //cv::imwrite("depth.png", depth);
-        //Py_Finalize();
-        Py_DECREF(pParm);
-        Py_DECREF(PyArray);
-        Py_DECREF(pRetVal);
-        Py_DECREF(Pynp_ret);
-
-//        cout << "Depth estimation finished!" << endl << flush;
-
-        return depth * mDepthRatio * focalLength / mTrainingFocalLength;
     }
 
     DepthEstimator::~DepthEstimator() {

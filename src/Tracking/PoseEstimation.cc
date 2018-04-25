@@ -55,7 +55,7 @@ namespace cnn_slam {
 
     struct CostFunctor {
         Mat imColor;
-        ORB_SLAM2::KeyFrame *pReferenceKF;
+        ORB_SLAM2::KeyFrame *pRefKF;
         Mat Kt;      // Transposed calibration matrix.
         Mat invKt;   // Transposed inverse calibration matrix.
         float cameraPixelNoise2;
@@ -66,7 +66,7 @@ namespace cnn_slam {
                     Mat invK,
                     float cameraPixelNoise2)
                 : imColor(imColor),
-                  pReferenceKF(pReferenceKF),
+                  pRefKF(pReferenceKF),
                   Kt(K.t()),
                   invKt(invK.t()),
                   cameraPixelNoise2(cameraPixelNoise2) {}
@@ -89,20 +89,20 @@ namespace cnn_slam {
             Mat(Rt.t()).convertTo(Rt, CV_32F);
             Mat tt(1, 3, type, (void *) t);  // Transposed translation matrix.
             tt.convertTo(tt, CV_32F);
-            tt = repeat(tt, pReferenceKF->mHighGradPtDepth.rows, 1);
+            tt = repeat(tt, pRefKF->mHighGradPtDepth.rows, 1);
 
             // Calculate projected 2D location in the current frame
             // of the high gradient points in the reference keyframe.
-            Mat proj3d = (repeat(pReferenceKF->mHighGradPtDepth, 1, 3)
-                                  .mul(pReferenceKF->mHighGradPtHomo2dCoord)
+            Mat proj3d = (repeat(pRefKF->mHighGradPtDepth, 1, 3)
+                                  .mul(pRefKF->mHighGradPtHomo2dCoord)
                           * invKt * Rt + tt) * Kt;
             Mat proj2d = proj3d.colRange(0, 2) / repeat(proj3d.col(2), 1, 2);
             assert(proj2d.cols == 2);
             proj2d.convertTo(proj2d, CV_32S);
 
             // Also calculate projected 2D location using slightly adjusted depth map.
-            Mat proj3dRight = (repeat(pReferenceKF->mHighGradPtDepth + pReferenceKF->mHighGradPtSqrtUncertainty, 1, 3)
-                                       .mul(pReferenceKF->mHighGradPtHomo2dCoord) * invKt * Rt + tt) * Kt;
+            Mat proj3dRight = (repeat(pRefKF->mHighGradPtDepth + pRefKF->mHighGradPtSqrtUncertainty, 1, 3)
+                                       .mul(pRefKF->mHighGradPtHomo2dCoord) * invKt * Rt + tt) * Kt;
             Mat proj2dRight = proj3dRight.colRange(0, 2) / repeat(proj3dRight.col(2), 1, 2);
             proj2dRight.convertTo(proj2dRight, CV_32S);
 
@@ -133,12 +133,12 @@ namespace cnn_slam {
             }
 
             // Calculate photometric residual.
-            Mat res = pReferenceKF->mHighGradPtPixels - pixels;
+            Mat res = pRefKF->mHighGradPtPixels - pixels;
             res.convertTo(res, CV_32F);
             cv::pow(res, 2, res);
             reduce(res, res, 1, CV_REDUCE_SUM, CV_32F);
             cv::sqrt(res, res);
-            Mat resRight = pReferenceKF->mHighGradPtPixels - pixelsRight;
+            Mat resRight = pRefKF->mHighGradPtPixels - pixelsRight;
             resRight.convertTo(resRight, CV_32F);
             cv::pow(resRight, 2, resRight);
             reduce(resRight, resRight, 1, CV_REDUCE_SUM, CV_32F);
@@ -175,6 +175,7 @@ namespace cnn_slam {
                              float cameraPixelNoise2,
                              double max_seconds,
                              Mat &Tcw,
+                             const cv::Mat initialTcw,
                              float *rotAngle,
                              float *transDist,
                              float *validRatio) {
@@ -183,11 +184,27 @@ namespace cnn_slam {
         double relRotationRodrigues[] = {0, 0, 0};
         double relTranslation[] = {0, 0, 0};
 
+        if (!initialTcw.empty()) {
+            // Initialize the relative pose according to the given initial pose.
+            Mat Trel = pRefKF->GetPose() * initialTcw.inv();
+            Mat rodrigues;
+            Rodrigues(Trel.colRange(0, 3).rowRange(0, 3), rodrigues);
+            relRotationRodrigues[0] = rodrigues.at<float>(0);
+            relRotationRodrigues[1] = rodrigues.at<float>(1);
+            relRotationRodrigues[2] = rodrigues.at<float>(2);
+            relTranslation[0] = Trel.at<float>(0, 3);
+            relTranslation[1] = Trel.at<float>(1, 3);
+            relTranslation[2] = Trel.at<float>(2, 3);
+        }
+
         Problem problem;
         CostFunction *cost_function = new NumericDiffCostFunction<CostFunctor, RIDDERS, TRACKING_NUM_PT, 3, 3>(
                 new CostFunctor(imColor, pRefKF, K, invK, cameraPixelNoise2));
         auto *loss_function = new LossFunctionWrapper(new HuberLoss(TRACKING_HUBER_DELTA), TAKE_OWNERSHIP);
         problem.AddResidualBlock(cost_function, loss_function, relRotationRodrigues, relTranslation);
+
+        while (!pRefKF->mbDepthReady)
+            usleep(1000);
 
         Solver::Options options;
         options.num_threads = thread::hardware_concurrency();   // Use all cores.

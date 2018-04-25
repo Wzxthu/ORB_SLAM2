@@ -24,13 +24,67 @@
 #include<mutex>
 #include <DepthEstimation/DepthEstimator.h>
 #include <util/settings.h>
+#include <thread>
 
 namespace ORB_SLAM2
 {
 
 long unsigned int KeyFrame::nNextId=0;
 
-KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
+inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor, int numPt) {
+    using namespace cv;
+    using namespace cnn_slam;
+
+    // Find high gradient points.
+    // For efficiency, we first down-sample the image by 4,
+    // then find top TRACKING_NUM_PT/16 points with greatest gradient.
+    // The finally selected points are points from the 4x4 pathces around the corresponding points.
+    int numPatch = numPt >> 4;
+    Mat smallIm;
+    resize(imColor, smallIm, Size(imColor.cols >> 2, imColor.rows >> 2));
+    Mat grad;
+    Laplacian(smallIm, grad, CV_16S);
+    convertScaleAbs(grad, grad);
+
+    // Sort the gradients.
+    typedef pair<uchar, Point2i> GradInfo;
+    vector<GradInfo> gradCoord;
+    gradCoord.reserve(static_cast<unsigned long>(grad.rows * grad.cols));
+    for (int i = 0; i < grad.rows; ++i) {
+        auto rowGrad = grad.ptr<uchar>(i);
+        for (int j = 0; j < grad.cols; ++j) {
+            gradCoord.emplace_back(rowGrad[j], Point2i(j, i));
+        }
+    }
+    sort(gradCoord.begin(), gradCoord.end(), [](const GradInfo &p1, const GradInfo &p2) {
+        return p1.first > p2.first; // Sort in descending order.
+    });
+
+    // Recover original coordinates and extract data.
+    Mat highGradPtHomo2dCoord = Mat::ones(numPt, 3, CV_32F);
+    highGradPtHomo2dCoord.col(2) = Mat::ones(numPt, 1, CV_32F);
+//#pragma omp parallel for
+    for (int i = 0; i < numPatch; ++i) {
+        int x = gradCoord[i].second.x << 2;
+        int y = gradCoord[i].second.y << 2;
+        int row = i * 16;
+        for (int dx = 0; dx < 4; ++dx) {
+            for (int dy = 0; dy < 4; ++dy) {
+                highGradPtHomo2dCoord.at<float>(row, 0) = x + dx;
+                highGradPtHomo2dCoord.at<float>(row, 1) = y + dy;
+                ++row;
+            }
+        }
+    }
+
+    return highGradPtHomo2dCoord;
+}
+
+KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
+                   cv::Mat imColor,
+                   cnn_slam::DepthEstimator *pDepthEstimator,
+                   KeyFrame *pPrevKF,
+                   float focalLength):
     mnFrameId(F.mnId),  mTimeStamp(F.mTimeStamp), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
     mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
     mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
@@ -43,7 +97,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     mvInvLevelSigma2(F.mvInvLevelSigma2), mnMinX(F.mnMinX), mnMinY(F.mnMinY), mnMaxX(F.mnMaxX),
     mnMaxY(F.mnMaxY), mK(F.mK), mInvK(F.mK.inv()), mvpMapPoints(F.mvpMapPoints), mpKeyFrameDB(pKFDB),
     mpORBvocabulary(F.mpORBvocabulary), mbFirstConnection(true), mpParent(NULL), mbNotErase(false),
-    mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap)
+    mbToBeErased(false), mbBad(false), mHalfBaseline(F.mb/2), mpMap(pMap), mbDepthReady(false), mbWorking(true)
 {
     mnId=nNextId++;
 
@@ -56,14 +110,33 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB):
     }
 
     SetPose(F.mTcw);
+
+    cout << "Focal length: " << focalLength << endl;
+
+    if (!imColor.empty() and pDepthEstimator) {
+        mHighGradPtHomo2dCoord = SelectHighGradientPoints(imColor, cnn_slam::TRACKING_NUM_PT);
+
+        thread depth_estimation_thread([this, imColor, pDepthEstimator, pPrevKF, focalLength]() {
+            EstimateDepth(imColor, pDepthEstimator, pPrevKF, focalLength);
+        });
+        depth_estimation_thread.detach();
+    }
 }
 
-void KeyFrame::EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength) {
+KeyFrame::~KeyFrame() {
+    while (mbWorking)
+        usleep(1000);
+}
+
+void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength) {
+    mbWorking = true;
+    mbDepthReady = false;
+
     using namespace cv;
 
     // Estimate depth.
-    mDepthMap = pDepthEstimator->EstimateDepth(im, focalLength);
-    imwrite("image.jpg", im);
+    pDepthEstimator->EstimateDepth(imColor, mDepthMap, focalLength);
+    imwrite("image.jpg", imColor);
     Mat depthDisplay;
     double minDepth, maxDepth;
     cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
@@ -79,7 +152,7 @@ void KeyFrame::EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimat
         Mat depthVec = mDepthMap.reshape(0, mDepthMap.rows * mDepthMap.cols);
 
         Mat vertices(depthVec.rows, 3, CV_32F);
-#pragma omp parallel for
+//#pragma omp parallel for
         for (int i = 0; i < mDepthMap.rows; ++i) {
             int row_cnt = i * mDepthMap.cols;
             for (int j = 0; j < mDepthMap.cols; ++j)
@@ -93,13 +166,13 @@ void KeyFrame::EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimat
         proj2d.convertTo(proj2d, CV_32S);
 
         Mat valid = proj2d.col(0) >= 0;
-        bitwise_and(valid, proj2d.col(0) < pPrevKF->mDepthMap.rows, valid, valid);
+        bitwise_and(valid, proj2d.col(0) < pPrevKF->mDepthMap.cols, valid, valid);
         bitwise_and(valid, proj2d.col(1) >= 0, valid, valid);
-        bitwise_and(valid, proj2d.col(1) < pPrevKF->mDepthMap.cols, valid, valid);
+        bitwise_and(valid, proj2d.col(1) < pPrevKF->mDepthMap.rows, valid, valid);
 
         // Estimate uncertainty on each valid point.
         mUncertaintyMap = Mat(mDepthMap.rows * mDepthMap.cols, 1, CV_32F);
-#pragma omp parallel for
+//#pragma omp parallel for
         for (int i = 0; i < valid.rows; ++i)
             if (valid.at<uchar>(i)) {
                 auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1),
@@ -129,61 +202,22 @@ void KeyFrame::EstimateDepth(cv::Mat im, cnn_slam::DepthEstimator *pDepthEstimat
         mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     }
 
-}
-
-void KeyFrame::SelectHighGradientPoints(cv::Mat im) {
-    using namespace cv;
-    using namespace cnn_slam;
-
-    // Find high gradient points.
-    // For efficiency, we first down-sample the image by 4,
-    // then find top TRACKING_NUM_PT/16 points with greatest gradient.
-    // The finally selected points are points from the 4x4 pathces around the corresponding points.
-    int numTop = TRACKING_NUM_PT >> 4u;
-    Mat smallIm;
-    resize(im, smallIm, Size(im.cols >> 2, im.rows >> 2));
-    Mat grad;
-    Laplacian(smallIm, grad, CV_16S);
-    convertScaleAbs(grad, grad);
-
-    // Sort the gradients.
-    typedef pair<uchar, Point2i> GradInfo;
-    vector<GradInfo> gradCoord;
-    gradCoord.reserve(static_cast<unsigned long>(grad.rows * grad.cols));
-    for (int i = 0; i < grad.rows; ++i) {
-        auto rowGrad = grad.ptr<uchar>(i);
-        for (int j = 0; j < grad.cols; ++j) {
-            gradCoord.emplace_back(rowGrad[j], Point2i(j, i));
-        }
-    }
-    sort(gradCoord.begin(), gradCoord.end(), [](const GradInfo &p1, const GradInfo &p2) {
-        return p1.first > p2.first; // Sort in descending order.
-    });
-
-    // Recover original coordinates and extract data.
-    mHighGradPtHomo2dCoord = Mat::ones(TRACKING_NUM_PT, 3, CV_32F);
-    mHighGradPtHomo2dCoord.col(2) = Mat::ones(TRACKING_NUM_PT, 1, CV_32F);
-    mHighGradPtDepth = Mat(TRACKING_NUM_PT, 1, CV_32F);
-    mHighGradPtPixels = Mat(TRACKING_NUM_PT, 3, CV_8U);
-    mHighGradPtSqrtUncertainty = Mat(TRACKING_NUM_PT, 1, CV_32F);
-    mHighGradPtUncertainty = Mat(TRACKING_NUM_PT, 1, CV_32F);
+    mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
+    mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
+    mHighGradPtSqrtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
+    mHighGradPtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
 #pragma omp parallel for
-    for (int i = 0; i < numTop; ++i) {
-        int x = gradCoord[i].second.x << 2;
-        int y = gradCoord[i].second.y << 2;
-        int toFill = i * 16;
-        for (int dx = 0; dx < 4; ++dx) {
-            for (int dy = 0; dy < 4; ++dy) {
-                mHighGradPtHomo2dCoord.at<float>(toFill, 0) = x + dx;
-                mHighGradPtHomo2dCoord.at<float>(toFill, 1) = y + dy;
-                mHighGradPtDepth.at<float>(toFill, 0) = mDepthMap.at<float>(y + dy, x + dx);
-                mHighGradPtUncertainty.at<float>(toFill, 0) = mUncertaintyMap.at<float>(y + dy, x + dx);
-                mHighGradPtPixels.row(toFill) = im.col(x + dx).row(y + dy).reshape(1, 3);
-                ++toFill;
-            }
-        }
+    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i) {
+        int x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
+        int y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
+        mHighGradPtDepth.at<float>(i, 0) = mDepthMap.at<float>(y, x);
+        mHighGradPtUncertainty.at<float>(i, 0) = mUncertaintyMap.at<float>(y, x);
+        mHighGradPtPixels.row(i) = imColor.col(x).row(y).reshape(1, 3);
     }
     sqrt(mHighGradPtUncertainty, mHighGradPtSqrtUncertainty);
+
+    mbDepthReady = true;
+    mbWorking = false;
 }
 
 void KeyFrame::ComputeBoW()

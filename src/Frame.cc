@@ -105,6 +105,7 @@ Frame::Frame(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timeSt
         fy = K.at<float>(1,1);
         cx = K.at<float>(0,2);
         cy = K.at<float>(1,2);
+        focalLength = sqrt(fx * fx + fy * fy);
         invfx = 1.0f/fx;
         invfy = 1.0f/fy;
 
@@ -159,6 +160,7 @@ Frame::Frame(const cv::Mat &imGray, const cv::Mat &imDepth, const double &timeSt
         fy = K.at<float>(1,1);
         cx = K.at<float>(0,2);
         cy = K.at<float>(1,2);
+        focalLength = sqrt(fx * fx + fy * fy);
         invfx = 1.0f/fx;
         invfy = 1.0f/fy;
 
@@ -216,6 +218,7 @@ Frame::Frame(const cv::Mat &imGray, const double &timeStamp, ORBextractor* extra
         fy = K.at<float>(1,1);
         cx = K.at<float>(0,2);
         cy = K.at<float>(1,2);
+        focalLength = sqrt(fx * fx + fy * fy);
         invfx = 1.0f/fx;
         invfy = 1.0f/fy;
 

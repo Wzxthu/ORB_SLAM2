@@ -30,13 +30,14 @@
 #include <cstring>
 #include <opencv2/highgui/highgui.hpp>
 #include <opencv2/opencv.hpp>
+#include <mutex>
 
 namespace cnn_slam {
     class DepthEstimator {
     public:
         void Initialize();
         DepthEstimator();
-        cv::Mat EstimateDepth(cv::Mat img, float focalLength);
+        void EstimateDepth(const cv::Mat& im, cv::Mat& depth, float focalLength);
         ~DepthEstimator();
 
     private:
@@ -46,6 +47,7 @@ namespace cnn_slam {
         float mTrainingFocalLength;
         float mDepthRatio;
         bool mInitialized;
+        std::mutex mForwardMutex;
     };
 }
 

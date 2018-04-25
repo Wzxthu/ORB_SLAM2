@@ -50,8 +50,8 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
 {
-//    mpDepthEstimator = new cnn_slam::DepthEstimator;
-//    mpDepthEstimator->Initialize();
+    mpDepthEstimator = new cnn_slam::DepthEstimator;
+    mpDepthEstimator->Initialize();
 
     // Load camera parameters from settings file
 
@@ -88,6 +88,9 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     if(fps==0)
         fps=30;
     mFPS = fps;
+
+    float cameraPixelNoise = fSettings["Camera.PixelNoise"];
+    mCameraPixelNoise2 = static_cast<float>(pow(cameraPixelNoise, 2));
 
     // Max/Min Frames to insert keyframes and to check relocalisation
     mMinFrames = 0;
@@ -657,8 +660,8 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
-    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB);
-    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,nullptr,mInitialFrame.focalLength);
+    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
 
 
     pKFini->ComputeBoW();
@@ -793,6 +796,10 @@ bool Tracking::TrackReferenceKeyFrame()
     mCurrentFrame.SetPose(mLastFrame.mTcw);
 
     Optimizer::PoseOptimization(&mCurrentFrame);
+//    cv::Mat Tcw;
+//    cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mCurrentFrame.mpReferenceKF, mCameraPixelNoise2,
+//                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+//    mCurrentFrame.SetPose(Tcw);
 
     // Discard outliers
     int nmatchesMap = 0;
@@ -1085,7 +1092,11 @@ void Tracking::CreateNewKeyFrame()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+    KeyFrame* pKF = nullptr;
+    if(mSensor!=System::MONOCULAR)
+        pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+    else
+        pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,mCurrentFrame.mpReferenceKF,mCurrentFrame.focalLength);
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;
