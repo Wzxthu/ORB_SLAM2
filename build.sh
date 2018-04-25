@@ -1,5 +1,9 @@
 echo "Configuring and building Thirdparty/DBoW2 ..."
 
+cd FCRN-DepthPrediction
+python compile.py
+cd ..
+
 cd Thirdparty/DBoW2
 mkdir build
 cd build
