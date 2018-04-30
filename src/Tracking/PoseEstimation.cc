@@ -47,17 +47,23 @@ namespace cnn_slam {
 
     struct CostFunctor {
         Mat imColor;
+        Mat imGradX;
+        Mat imGradY;
         ORB_SLAM2::KeyFrame *pRefKF;
         Mat Kt;      // Transposed calibration matrix.
         Mat invKt;   // Transposed inverse calibration matrix.
         float cameraPixelNoise2;
 
         CostFunctor(Mat imColor,
+                    Mat imGradX,
+                    Mat imGradY,
                     ORB_SLAM2::KeyFrame *pReferenceKF,
                     Mat K,
                     Mat invK,
                     float cameraPixelNoise2)
                 : imColor(imColor),
+                  imGradX(imGradX),
+                  imGradY(imGradY),
                   pRefKF(pReferenceKF),
                   Kt(K.t()),
                   invKt(invK.t()),
@@ -89,58 +95,65 @@ namespace cnn_slam {
                                   .mul(pRefKF->mHighGradPtHomo2dCoord)
                           * invKt * Rt + tt) * Kt;
             Mat proj2d = proj3d.colRange(0, 2) / repeat(proj3d.col(2), 1, 2);
-            assert(proj2d.cols == 2);
-            proj2d.convertTo(proj2d, CV_32S);
+            Mat proj2d_round;
+            proj2d.convertTo(proj2d_round, CV_32S);
+            Mat proj2d_offset = proj2d - proj2d_round;
 
-            // Also calculate projected 2D location using slightly adjusted depth map.
-            Mat proj3dRight = (repeat(pRefKF->mHighGradPtDepth + pRefKF->mHighGradPtSqrtUncertainty, 1, 3)
-                                       .mul(pRefKF->mHighGradPtHomo2dCoord) * invKt * Rt + tt) * Kt;
-            Mat proj2dRight = proj3dRight.colRange(0, 2) / repeat(proj3dRight.col(2), 1, 2);
-            proj2dRight.convertTo(proj2dRight, CV_32S);
+            // Calculate derivative of projected 2D coordinate regarding depth.
+            Mat coord_deriv = pRefKF->mHighGradPtHomo2dCoord * invKt * Rt * Kt / repeat(proj3d.col(2), 1, 3);
 
-            Mat valid = proj2d.col(0) >= 0;
-            bitwise_and(valid, proj2d.col(0) < imColor.cols, valid, valid);
-            bitwise_and(valid, proj2d.col(1) >= 0, valid, valid);
-            bitwise_and(valid, proj2d.col(1) < imColor.rows, valid, valid);
-            bitwise_and(valid, proj2dRight.col(0) >= 0, valid, valid);
-            bitwise_and(valid, proj2dRight.col(0) < imColor.cols, valid, valid);
-            bitwise_and(valid, proj2dRight.col(1) >= 0, valid, valid);
-            bitwise_and(valid, proj2dRight.col(1) < imColor.rows, valid, valid);
+            // Find out points whose 2D projection is in frame.
+            Mat valid = proj2d_round.col(0) >= 0;
+            bitwise_and(valid, proj2d_round.col(0) < imColor.cols, valid, valid);
+            bitwise_and(valid, proj2d_round.col(1) >= 0, valid, valid);
+            bitwise_and(valid, proj2d_round.col(1) < imColor.rows, valid, valid);
 
-            // Extract pixels from the current frame.
-            Mat pixels(valid.rows, 3, CV_8U), pixelsRight(valid.rows, 3, CV_8U);
+            Mat regRes(valid.rows, 3, CV_32F);
+            // Extract pixel values from the current frame, then calculate photometric residual and variance, and
+            // finally regularize the photometric residual.
 #pragma omp parallel for
             for (int i = 0; i < valid.rows; ++i) {
                 if (valid.at<uchar>(i)) {
-                    auto pixel = imColor.at<Vec3b>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
-                    pixels.at<uchar>(i, 0) = pixel.val[0];
-                    pixels.at<uchar>(i, 1) = pixel.val[1];
-                    pixels.at<uchar>(i, 2) = pixel.val[2];
+                    // Extract pixel at rounded position in the image.
+                    auto pixel = imColor.at<Vec3b>(proj2d_round.at<int>(i, 1), proj2d_round.at<int>(i, 0));
+                    // Approximate accurate pixel value by gradient and rounding offset.
+                    auto gradX = imGradX.at<Vec3b>(proj2d_round.at<int>(i, 1), proj2d_round.at<int>(i, 0));
+                    auto gradY = imGradY.at<Vec3b>(proj2d_round.at<int>(i, 1), proj2d_round.at<int>(i, 0));
+                    float pc0 = pixel.val[0] +
+                                gradX[0] * proj2d_offset.at<float>(i, 0) +
+                                gradY[0] * proj2d_offset.at<float>(i, 1);
+                    float pc1 = pixel.val[1] +
+                                gradX[1] * proj2d_offset.at<float>(i, 0) +
+                                gradY[1] * proj2d_offset.at<float>(i, 1);
+                    float pc2 = pixel.val[2] +
+                                gradX[2] * proj2d_offset.at<float>(i, 0) +
+                                gradY[2] * proj2d_offset.at<float>(i, 1);
 
-                    pixel = imColor.at<Vec3b>(proj2dRight.at<int>(i, 1), proj2dRight.at<int>(i, 0));
-                    pixelsRight.at<uchar>(i, 0) = pixel.val[0];
-                    pixelsRight.at<uchar>(i, 1) = pixel.val[1];
-                    pixelsRight.at<uchar>(i, 2) = pixel.val[2];
+                    // Calculate photometric residual.
+                    float res_c0 = pc0 - pRefKF->mHighGradPtPixels.at<uchar>(i, 0);
+                    float res_c1 = pc1 - pRefKF->mHighGradPtPixels.at<uchar>(i, 1);
+                    float res_c2 = pc2 - pRefKF->mHighGradPtPixels.at<uchar>(i, 2);
+
+                    // Calculate derivative of photometric residual with respect to depth.
+                    float der_c0 = gradX[0] * coord_deriv.at<float>(i, 0);
+                    float der_c1 = gradX[1] * coord_deriv.at<float>(i, 1);
+                    float der_c2 = gradX[2] * coord_deriv.at<float>(i, 2);
+
+                    // Calculate variance of photometric residual.
+                    float var_c0 = 2 * cameraPixelNoise2 +
+                                   der_c0 * der_c0 * pRefKF->mHighGradPtSqrtUncertainty.at<float>(i, 0);
+                    float var_c1 = 2 * cameraPixelNoise2 +
+                                   der_c1 * der_c1 * pRefKF->mHighGradPtSqrtUncertainty.at<float>(i, 1);
+                    float var_c2 = 2 * cameraPixelNoise2 +
+                                   der_c2 * der_c2 * pRefKF->mHighGradPtSqrtUncertainty.at<float>(i, 2);
+
+                    // Calculate regularized photometric residual.
+                    regRes.at<float>(i, 0) = fabs(res_c0 / std::sqrt(var_c0));
+                    regRes.at<float>(i, 1) = fabs(res_c1 / std::sqrt(var_c1));
+                    regRes.at<float>(i, 2) = fabs(res_c2 / std::sqrt(var_c2));
                 }
             }
 
-            // Calculate photometric residual.
-            Mat res = pRefKF->mHighGradPtPixels - pixels;
-            res.convertTo(res, CV_32F);
-            cv::pow(res, 2, res);
-            reduce(res, res, 1, CV_REDUCE_SUM, CV_32F);
-            cv::sqrt(res, res);
-            Mat resRight = pRefKF->mHighGradPtPixels - pixelsRight;
-            resRight.convertTo(resRight, CV_32F);
-            cv::pow(resRight, 2, resRight);
-            reduce(resRight, resRight, 1, CV_REDUCE_SUM, CV_32F);
-            cv::sqrt(resRight, resRight);
-
-            Mat diff;
-            cv::pow(resRight - res, 2, diff);
-            Mat var = diff + 2 * cameraPixelNoise2;
-            cv::sqrt(var, var);
-            Mat regRes = res / var;
             // Set the invalid points to mean residual.
             float meanRes = static_cast<float>(mean(regRes, valid)[0]);
 #pragma omp parallel for
@@ -152,8 +165,6 @@ namespace cnn_slam {
             regRes.convertTo(regRes, type);
             assert(regRes.isContinuous());
             memcpy(residual, regRes.data, sizeof(T) * regRes.rows);
-
-            cv::pow(regRes, 2, regRes);
             return true;
         }
     };
@@ -187,9 +198,13 @@ namespace cnn_slam {
             relTranslation[2] = Trel.at<float>(2, 3);
         }
 
+        Mat imGradX, imGradY;
+        cv::Sobel(imColor, imGradX, CV_64FC3, 1, 0);
+        cv::Sobel(imColor, imGradY, CV_64FC3, 0, 1);
+
         Problem problem;
         CostFunction *cost_function = new NumericDiffCostFunction<CostFunctor, RIDDERS, TRACKING_NUM_PT, 3, 3>(
-                new CostFunctor(imColor, pRefKF, K, invK, cameraPixelNoise2));
+                new CostFunctor(imColor, imGradX, imGradY, pRefKF, K, invK, cameraPixelNoise2));
         auto *loss_function = new LossFunctionWrapper(new HuberLoss(TRACKING_HUBER_DELTA), TAKE_OWNERSHIP);
         problem.AddResidualBlock(cost_function, loss_function, relRotationRodrigues, relTranslation);
 
