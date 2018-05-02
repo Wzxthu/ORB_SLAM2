@@ -206,7 +206,7 @@ namespace cnn_slam {
                              float cameraPixelNoise2,
                              double max_seconds,
                              Mat &Tcw,
-                             const cv::Mat initialTcw,
+                             cv::Mat initialTcw,
                              float *rotAngle,
                              float *transDist,
                              float *validRatio) {
@@ -217,7 +217,7 @@ namespace cnn_slam {
 
         if (!initialTcw.empty()) {
             // Initialize the relative pose according to the given initial pose.
-            Mat Trel = pRefKF->GetPose() * initialTcw.inv();
+            Mat Trel = initialTcw * pRefKF->GetPose().inv();
             Mat rodrigues;
             Rodrigues(Trel.colRange(0, 3).rowRange(0, 3), rodrigues);
             relRotationRodrigues[0] = rodrigues.at<float>(0);

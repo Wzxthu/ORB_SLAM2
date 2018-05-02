@@ -32,8 +32,13 @@
 
 namespace cnn_slam {
 
+    template <class T>
+    inline T min(const T& a, const T& b) {
+        return a < b ? a : b;
+    }
+
     inline float RotationAngle(const cv::Mat &R) {
-        return static_cast<float>(std::acos((trace(R)[0] - 1) / 2));
+        return static_cast<float>(std::acos((min(3., trace(R)[0]) - 1) / 2));
     }
 
     inline float TranslationDist(const cv::Mat &t) {
@@ -51,7 +56,7 @@ namespace cnn_slam {
                              float cameraPixelNoise2,
                              double max_seconds,
                              cv::Mat &Tcw,
-                             const cv::Mat initialTcw = cv::Mat(),
+                             cv::Mat initialTcw = cv::Mat(),
                              float *rotAngle = nullptr,
                              float *transDist = nullptr,
                              float *validRatio = nullptr);
