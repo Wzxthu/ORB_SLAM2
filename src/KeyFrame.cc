@@ -42,23 +42,39 @@ inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor, int numPt) {
     int numPatch = numPt >> 4;
     Mat smallIm;
     resize(imColor, smallIm, Size(imColor.cols >> 2, imColor.rows >> 2));
+    GaussianBlur(smallIm, smallIm, Size(3,3), 0, 0, BORDER_DEFAULT );
+    cvtColor(smallIm, smallIm, CV_BGR2GRAY);
     Mat grad;
-    Laplacian(smallIm, grad, CV_16S);
-    convertScaleAbs(grad, grad);
+    Laplacian(smallIm, grad, CV_16S, 3);
+    convertScaleAbs(grad, grad);    // Convert to CV_8U image.
 
     // Sort the gradients.
     typedef pair<uchar, Point2i> GradInfo;
     vector<GradInfo> gradCoord;
     gradCoord.reserve(static_cast<unsigned long>(grad.rows * grad.cols));
     for (int i = 0; i < grad.rows; ++i) {
-        auto rowGrad = grad.ptr<uchar>(i);
+        auto gradRow = grad.ptr<uchar>(i);
         for (int j = 0; j < grad.cols; ++j) {
-            gradCoord.emplace_back(rowGrad[j], Point2i(j, i));
+            gradCoord.emplace_back(gradRow[j],
+                                   Point2i(j, i));
         }
     }
     sort(gradCoord.begin(), gradCoord.end(), [](const GradInfo &p1, const GradInfo &p2) {
         return p1.first > p2.first; // Sort in descending order.
     });
+
+//    {
+//        Mat canvas = grad.clone();
+//        resize(canvas, canvas, imColor.size());
+//        cvtColor(canvas, canvas, CV_GRAY2BGR);
+//        cout << numPatch << endl;
+//        for (int i = 0; i < numPatch; ++i) {
+//            cout << int(gradCoord[i].first) << ' ' << int(grad.at<uchar>(gradCoord[i].second.y, gradCoord[i].second.x)) << endl;
+//            cv::circle(canvas, Point(gradCoord[i].second.x << 2, gradCoord[i].second.y << 2), 2, Scalar(0, 255, 0));
+//        }
+//        imshow("Selected patches", canvas);
+//        waitKey(0);
+//    }
 
     // Recover original coordinates and extract data.
     Mat highGradPtHomo2dCoord = Mat::ones(numPt, 3, CV_32F);
@@ -138,12 +154,9 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
     Mat depthDisplay;
     double minDepth, maxDepth;
     cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
-//    cout << "Min depth: " << minDepth << "; Max depth: " << maxDepth << "." << endl;
     depthDisplay = mDepthMap / maxDepth * 255;
     depthDisplay.convertTo(depthDisplay, CV_8U);
     imwrite("depth.jpg", depthDisplay);
-
-//    cout << "Depth image saved!" << endl;
 
     // Estimate uncertainty map.
     if (pPrevKF && !pPrevKF->GetPose().empty()) {
@@ -158,26 +171,18 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
             for (int j = 0; j < mDepthMap.cols; ++j)
                 vertices.row(row_cnt++) = (Mat_<float>(1, 3) << j, i, 1) * mDepthMap.at<float>(i, j);
         }
-//        cout << "Vertices prepared!" << endl << flush;
-//        cout << pPrevKF->GetPose().type() << ' ' << GetPoseInverse().type() << ' ' << CV_32F << endl << flush;
 
         Mat Trel = pPrevKF->GetPose() * GetPoseInverse();
-//        cout << Trel << endl;
-//        cout << vertices.type() << ' ' << mInvK.type() << ' ' << Trel.type() << ' ' << pPrevKF->mK.type() << endl;
         vertices = (vertices * mInvK.t() * Trel.rowRange(0, 3).colRange(0, 3).t()
                     + repeat(Trel.col(3).rowRange(0, 3).t(), vertices.rows, 1)) * pPrevKF->mK.t();
         Mat proj2d = vertices.colRange(0, 2) / repeat(vertices.col(2), 1, 2);
         assert(proj2d.cols == 2);
         proj2d.convertTo(proj2d, CV_32S);
 
-//        cout << "proj2d finished!" << endl << flush;
-
         Mat valid = proj2d.col(0) >= 0;
         bitwise_and(valid, proj2d.col(0) < pPrevKF->mDepthMap.cols, valid, valid);
         bitwise_and(valid, proj2d.col(1) >= 0, valid, valid);
         bitwise_and(valid, proj2d.col(1) < pPrevKF->mDepthMap.rows, valid, valid);
-
-//        cout << "Valid count: " << sum(valid)[0] / 255 << endl << flush;
 
         // Estimate uncertainty on each valid point.
         mUncertaintyMap = Mat(mDepthMap.rows * mDepthMap.cols, 1, CV_32F);
@@ -207,13 +212,10 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         // Reshape back to same as the depth map.
         mUncertaintyMap = mUncertaintyMap.reshape(0, mDepthMap.rows);
     } else {
-//        cout << "No previous keyframe given." << endl << flush;
-
+        // No previous keyframe given.
         cv::pow(mDepthMap, 2, mUncertaintyMap);
         mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     }
-
-//    cout << "Selecting high grad" << endl;
 
     mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
@@ -221,15 +223,19 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
     mHighGradPtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
 #pragma omp parallel for
     for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i) {
-        int x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
-        int y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
-        mHighGradPtDepth.at<float>(i, 0) = mDepthMap.at<float>(y, x);
-        mHighGradPtUncertainty.at<float>(i, 0) = mUncertaintyMap.at<float>(y, x);
+        auto x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
+        auto y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
+        mHighGradPtDepth.at<float>(i) = mDepthMap.at<float>(y, x);
+        mHighGradPtUncertainty.at<float>(i) = mUncertaintyMap.at<float>(y, x);
         mHighGradPtPixels.row(i) = imColor.col(x).row(y).reshape(1, 3);
     }
     sqrt(mHighGradPtUncertainty, mHighGradPtSqrtUncertainty);
 
-//    cout << "Quiting depth estimation..." << endl;
+    Mat canvas = imColor.clone();
+    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i)
+        cv::circle(canvas, Point(static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0)),
+                                 static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1))), 2, Scalar(255, 0, 0));
+    imwrite("selected.jpg", canvas);
 
     mbDepthReady = true;
     mbWorking = false;

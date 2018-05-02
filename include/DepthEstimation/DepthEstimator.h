@@ -35,19 +35,11 @@
 namespace cnn_slam {
     class DepthEstimator {
     public:
-        void Initialize();
-        DepthEstimator();
-        void EstimateDepth(const cv::Mat& im, cv::Mat& depth, float focalLength);
-        ~DepthEstimator();
+        virtual void Initialize() = 0;
 
-    private:
-        const char *mModelPath;
-        int mHeight, mWidth;
-        PyObject *mpModule, *mpFunc, *mpInstance;
-        float mTrainingFocalLength;
-        float mDepthRatio;
-        bool mInitialized;
-        std::mutex mForwardMutex;
+        virtual void EstimateDepth(const cv::Mat &im, cv::Mat &depth, float focalLength) = 0;
+
+        virtual ~DepthEstimator() {}
     };
 }
 

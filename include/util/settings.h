@@ -31,10 +31,9 @@
 #include <cmath>
 
 namespace cnn_slam {
-    const unsigned int TRACKING_NUM_PT = static_cast<const unsigned int>(sqrt(640 * 480));
+    const unsigned int TRACKING_NUM_PT = 1024;
     const float TRACKING_HUBER_DELTA =1.0;
     const float TRACKING_SOLVER_TIMECOST_RATIO = 0.5;
-    const float INIT_TOLERANCE = 25;
 }
 
 #endif //CNN_SLAM_SETTINGS_H

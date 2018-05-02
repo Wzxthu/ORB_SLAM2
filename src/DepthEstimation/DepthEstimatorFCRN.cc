@@ -25,7 +25,7 @@
 #include <opencv2/core/core.hpp>
 #include <cstring>
 #include <opencv2/highgui/highgui.hpp>
-#include <DepthEstimation/DepthEstimator.h>
+#include <DepthEstimation/DepthEstimatorFCRN.h>
 #include <numpy/arrayobject.h>
 #include <python2.7/tupleobject.h>
 
@@ -35,7 +35,7 @@
 using namespace std;
 
 namespace cnn_slam {
-    DepthEstimator::DepthEstimator() : mInitialized(false) {
+    DepthEstimatorFCRN::DepthEstimatorFCRN() : mInitialized(false) {
         mHeight = 228;
         mWidth = 304;
         mTrainingFocalLength = sqrt(powf(5.1885790117450188e+02f, 2) + powf(5.1946961112127485e+02f, 2));
@@ -45,7 +45,7 @@ namespace cnn_slam {
         mModelPath = "./FCRN-DepthPrediction/NYU_FCRN.ckpt";
     }
 
-    void DepthEstimator::Initialize() {
+    void DepthEstimatorFCRN::Initialize() {
         if (mInitialized)
             return;
 
@@ -96,7 +96,7 @@ namespace cnn_slam {
         init_thread.detach();
     }
 
-    void DepthEstimator::EstimateDepth(const cv::Mat& im,
+    void DepthEstimatorFCRN::EstimateDepth(const cv::Mat& im,
                                        cv::Mat& depth,
                                        float focalLength) {
         while (!mInitialized)
@@ -141,7 +141,7 @@ namespace cnn_slam {
         }
     }
 
-    DepthEstimator::~DepthEstimator() {
+    DepthEstimatorFCRN::~DepthEstimatorFCRN() {
         Py_DECREF(mpModule);
         Py_DECREF(mpFunc);
         Py_Finalize();

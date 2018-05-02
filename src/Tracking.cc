@@ -38,6 +38,8 @@
 
 #include<mutex>
 #include <unistd.h>
+#include <DepthEstimation/DepthEstimatorFCRN.h>
+#include <DepthEstimation/DepthEstimatorFake.h>
 
 
 using namespace std;
@@ -50,7 +52,10 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mpKeyFrameDB(pKFDB), mpInitializer(static_cast<Initializer*>(NULL)), mpSystem(pSys), mpViewer(NULL),
     mpFrameDrawer(pFrameDrawer), mpMapDrawer(pMapDrawer), mpMap(pMap), mnLastRelocFrameId(0)
 {
-    mpDepthEstimator = new cnn_slam::DepthEstimator;
+    if(sensor==System::MONOCULAR)
+        mpDepthEstimator = new cnn_slam::DepthEstimatorFCRN;
+    else
+        mpDepthEstimator = new cnn_slam::DepthEstimatorFake;
     mpDepthEstimator->Initialize();
 
     // Load camera parameters from settings file
@@ -90,6 +95,8 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
     mFPS = fps;
 
     float cameraPixelNoise = fSettings["Camera.PixelNoise"];
+    if (cameraPixelNoise <= 0)
+        cameraPixelNoise = 1;
     mCameraPixelNoise2 = static_cast<float>(pow(cameraPixelNoise, 2));
 
     // Max/Min Frames to insert keyframes and to check relocalisation
@@ -234,8 +241,23 @@ cv::Mat Tracking::GrabImageRGBD(const cv::Mat &imRGB,const cv::Mat &imD, const d
             cvtColor(mImGray,mImGray,CV_BGRA2GRAY);
     }
 
+    // Change the channel order to RGB to fit the depth prediction network.
+    mImColor = imRGB;
+    if (mImColor.channels() == 3) {
+        if (!mbRGB)
+            cvtColor(mImColor, mImColor, CV_BGR2RGB);
+    } else if (mImColor.channels() == 4) {
+        if (mbRGB)
+            cvtColor(mImColor, mImColor, CV_RGBA2RGB);
+        else
+            cvtColor(mImColor, mImColor, CV_BGRA2RGB);
+    } else
+        cvtColor(mImColor, mImColor, CV_GRAY2RGB);
+
     if((fabs(mDepthMapFactor-1.0f)>1e-5) || imDepth.type()!=CV_32F)
         imDepth.convertTo(imDepth,CV_32F,mDepthMapFactor);
+
+    static_cast<cnn_slam::DepthEstimatorFake *>(mpDepthEstimator)->SetDepthMap(imDepth);
 
     mCurrentFrame = Frame(mImGray,imDepth,timestamp,mpORBextractorLeft,mpORBVocabulary,mK,mDistCoef,mbf,mThDepth);
 
@@ -537,7 +559,8 @@ void Tracking::StereoInitialization()
         mCurrentFrame.SetPose(cv::Mat::eye(4,4,CV_32F));
 
         // Create KeyFrame
-        KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
+        KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
+                                        mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
 
         // Insert KeyFrame in the map
         mpMap->AddKeyFrame(pKFini);
@@ -660,8 +683,10 @@ void Tracking::MonocularInitialization()
 void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
-    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,nullptr,mInitialFrame.focalLength);
-    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
+    KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB,
+                                    mImColor,mpDepthEstimator,nullptr,mInitialFrame.focalLength);
+    KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
+                                    mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
 
 
     pKFini->ComputeBoW();
@@ -951,7 +976,7 @@ bool Tracking::TrackWithMotionModel()
             else if(mCurrentFrame.mvpMapPoints[i]->Observations()>0)
                 nmatchesMap++;
         }
-    }    
+    }
 
     if(mbOnlyTracking)
     {
@@ -1106,11 +1131,7 @@ void Tracking::CreateNewKeyFrame()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    KeyFrame* pKF = nullptr;
-    if(mSensor!=System::MONOCULAR)
-        pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB);
-    else
-        pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,mCurrentFrame.mpReferenceKF,mCurrentFrame.focalLength);
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,mCurrentFrame.mpReferenceKF,mCurrentFrame.focalLength);
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;

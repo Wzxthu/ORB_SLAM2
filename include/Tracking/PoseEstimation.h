@@ -44,7 +44,7 @@ namespace cnn_slam {
         std::cout << RotationAngle(T.colRange(0, 3).rowRange(0, 3)) << ' ' << TranslationDist(T.col(3).rowRange(0, 3)) << endl;
     }
 
-    float EstimateCameraPose(const cv::Mat &imColor,
+    float EstimateCameraPose(cv::Mat imColor,
                              const cv::Mat &K,
                              const cv::Mat &invK,
                              ORB_SLAM2::KeyFrame *pRefKF,
