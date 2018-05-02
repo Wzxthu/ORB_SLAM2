@@ -96,7 +96,7 @@ Tracking::Tracking(System *pSys, ORBVocabulary* pVoc, FrameDrawer *pFrameDrawer,
 
     float cameraPixelNoise = fSettings["Camera.PixelNoise"];
     if (cameraPixelNoise <= 0)
-        cameraPixelNoise = 1;
+        cameraPixelNoise = 4;
     mCameraPixelNoise2 = static_cast<float>(pow(cameraPixelNoise, 2));
 
     // Max/Min Frames to insert keyframes and to check relocalisation

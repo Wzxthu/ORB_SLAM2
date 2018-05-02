@@ -137,13 +137,13 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
 
     // Estimate depth.
     pDepthEstimator->EstimateDepth(imColor, mDepthMap, focalLength);
-    imwrite("image.jpg", imColor);
-    Mat depthDisplay;
-    double minDepth, maxDepth;
-    cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
-    depthDisplay = mDepthMap / maxDepth * 255;
-    depthDisplay.convertTo(depthDisplay, CV_8U);
-    imwrite("depth.jpg", depthDisplay);
+//    imwrite("image.jpg", imColor);
+//    Mat depthDisplay;
+//    double minDepth, maxDepth;
+//    cv::minMaxLoc(mDepthMap, &minDepth, &maxDepth);
+//    depthDisplay = mDepthMap / maxDepth * 255;
+//    depthDisplay.convertTo(depthDisplay, CV_8U);
+//    imwrite("depth.jpg", depthDisplay);
 
     // Estimate uncertainty map.
     if (pPrevKF && !pPrevKF->GetPose().empty()) {
@@ -233,11 +233,11 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         mHighGradPtUncertainty.at<float>(i) = mUncertaintyMap.at<float>(y, x);
     }
 
-    Mat canvas = imColor.clone();
-    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i)
-        cv::circle(canvas, Point(static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0)),
-                                 static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1))), 2, Scalar(255, 0, 0));
-    imwrite("selected.jpg", canvas);
+//    Mat canvas = imColor.clone();
+//    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i)
+//        cv::circle(canvas, Point(static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0)),
+//                                 static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1))), 2, Scalar(255, 0, 0));
+//    imwrite("selected.jpg", canvas);
 
     mbDepthReady = true;
     mbWorking = false;
