@@ -560,7 +560,7 @@ void Tracking::StereoInitialization()
 
         // Create KeyFrame
         KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
-                                        mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
+                                        mImColor,mpDepthEstimator,nullptr,mCurrentFrame.focalLength);
 
         // Insert KeyFrame in the map
         mpMap->AddKeyFrame(pKFini);
@@ -822,8 +822,10 @@ bool Tracking::TrackReferenceKeyFrame()
 
     Optimizer::PoseOptimization(&mCurrentFrame);
     cv::Mat Tcw;
+    cv::Mat initTcw = mLastFrame.mTcw;
+//    cv::Mat initTcw = mCurrentFrame.mTcw;
     cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
-                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, initTcw);
     cout << "Adjustment: ";
     cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
     mCurrentFrame.SetPose(Tcw);
@@ -951,8 +953,10 @@ bool Tracking::TrackWithMotionModel()
     // Optimize frame pose with all matches
     Optimizer::PoseOptimization(&mCurrentFrame);
     cv::Mat Tcw;
+    cv::Mat initTcw = mLastFrame.mTcw;
+//    cv::Mat initTcw = mCurrentFrame.mTcw;
     cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
-                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, initTcw);
     cout << "Adjustment: ";
     cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
     mCurrentFrame.SetPose(Tcw);
@@ -999,11 +1003,14 @@ bool Tracking::TrackLocalMap()
     // Optimize Pose
     Optimizer::PoseOptimization(&mCurrentFrame);
     cv::Mat Tcw;
+    cv::Mat initTcw = mLastFrame.mTcw;
+//    cv::Mat initTcw = mCurrentFrame.mTcw;
     cnn_slam::EstimateCameraPose(mImColor, mK, mInvK, mpReferenceKF, mCameraPixelNoise2,
-                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, mCurrentFrame.mTcw);
+                                 cnn_slam::TRACKING_SOLVER_TIMECOST_RATIO / mFPS, Tcw, initTcw);
     cout << "Adjustment: ";
     cnn_slam::PrintRotTrans(Tcw * mCurrentFrame.mTcw.inv());
     mCurrentFrame.SetPose(Tcw);
+
     mnMatchesInliers = 0;
 
     // Update MapPoints Statistics

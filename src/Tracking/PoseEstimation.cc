@@ -215,18 +215,18 @@ namespace cnn_slam {
         double relRotationRodrigues[] = {0, 0, 0};
         double relTranslation[] = {0, 0, 0};
 
-//        if (!initialTcw.empty()) {
-//            // Initialize the relative pose according to the given initial pose.
-//            Mat Trel = initialTcw * pRefKF->GetPose().inv();
-//            Mat rodrigues;
-//            Rodrigues(Trel.colRange(0, 3).rowRange(0, 3), rodrigues);
-//            relRotationRodrigues[0] = rodrigues.at<float>(0);
-//            relRotationRodrigues[1] = rodrigues.at<float>(1);
-//            relRotationRodrigues[2] = rodrigues.at<float>(2);
-//            relTranslation[0] = Trel.at<float>(0, 3);
-//            relTranslation[1] = Trel.at<float>(1, 3);
-//            relTranslation[2] = Trel.at<float>(2, 3);
-//        }
+        if (!initialTcw.empty()) {
+            // Initialize the relative pose according to the given initial pose.
+            Mat Trel = initialTcw * pRefKF->GetPoseInverse();
+            Mat rodrigues;
+            Rodrigues(Trel.colRange(0, 3).rowRange(0, 3), rodrigues);
+            relRotationRodrigues[0] = rodrigues.at<float>(0);
+            relRotationRodrigues[1] = rodrigues.at<float>(1);
+            relRotationRodrigues[2] = rodrigues.at<float>(2);
+            relTranslation[0] = Trel.at<float>(0, 3);
+            relTranslation[1] = Trel.at<float>(1, 3);
+            relTranslation[2] = Trel.at<float>(2, 3);
+        }
 
         // Perform sobel on each channel.
         imColor.convertTo(imColor, CV_32FC3);

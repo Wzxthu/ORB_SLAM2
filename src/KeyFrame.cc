@@ -117,10 +117,14 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
     if (!imColor.empty() and pDepthEstimator) {
         mHighGradPtHomo2dCoord = SelectHighGradientPoints(imColor, cnn_slam::TRACKING_NUM_PT << 1);
 
+        SetNotErase();
+        if (pPrevKF) pPrevKF->SetNotErase();
         thread depth_estimation_thread([this, imColor, pDepthEstimator, pPrevKF, focalLength]() {
-            EstimateDepth(imColor, pDepthEstimator, pPrevKF, focalLength);
+          EstimateDepth(imColor, pDepthEstimator, pPrevKF, focalLength);
         });
         depth_estimation_thread.detach();
+    } else {
+        throw exception();
     }
 }
 
@@ -129,7 +133,10 @@ KeyFrame::~KeyFrame() {
         usleep(1000);
 }
 
-void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength) {
+void KeyFrame::EstimateDepth(cv::Mat imColor,
+                             cnn_slam::DepthEstimator *pDepthEstimator,
+                             KeyFrame *pPrevKF,
+                             float focalLength) {
     mbWorking = true;
     mbDepthReady = false;
 
@@ -146,7 +153,7 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
 //    imwrite("depth.jpg", depthDisplay);
 
     // Estimate uncertainty map.
-    if (pPrevKF && !pPrevKF->GetPose().empty()) {
+    if (pPrevKF && !pPrevKF->isBad() && !pPrevKF->GetPose().empty()) {
         // Calculate projected 2D location in the current frame
         // of the high gradient points in the reference keyframe.
         Mat depthVec = mDepthMap.reshape(0, mDepthMap.rows * mDepthMap.cols);
@@ -195,6 +202,8 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         // Reshape the depth vector and the uncertainty vector to maps.
         mDepthMap = depthVec.reshape(0, mDepthMap.rows);
         mUncertaintyMap = uncertaintyVec.reshape(0, mDepthMap.rows);
+
+        pPrevKF->SetErase();
     } else {
         // No previous keyframe given.
         cv::pow(mDepthMap, 2, mUncertaintyMap);
@@ -241,6 +250,7 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
 
     mbDepthReady = true;
     mbWorking = false;
+    SetErase();
 }
 
 void KeyFrame::ComputeBoW()
