@@ -137,7 +137,6 @@ public:
     cv::Mat mHighGradPtPixels;      // Nx3 uchar.
     cv::Mat mHighGradPtDepth;       // Nx1 float.
     cv::Mat mHighGradPtUncertainty; // Nx1 float.
-    cv::Mat mHighGradPtSqrtUncertainty; // Nx1 float.
 
     static long unsigned int nNextId;
     long unsigned int mnId;

@@ -158,15 +158,15 @@ namespace cnn_slam {
                     float der_c2 = gradX[2] * coord_deriv.at<float>(i, 0) + gradY[2] * coord_deriv.at<float>(i, 1);
 
                     // Calculate variance of photometric residual.
-                    float uncertainty = pRefKF->mHighGradPtSqrtUncertainty.at<float>(i);
+                    float uncertainty = pRefKF->mHighGradPtUncertainty.at<float>(i);
                     float var_c0 = 2 * cameraPixelNoise2 + der_c0 * der_c0 * uncertainty;
                     float var_c1 = 2 * cameraPixelNoise2 + der_c1 * der_c1 * uncertainty;
                     float var_c2 = 2 * cameraPixelNoise2 + der_c2 * der_c2 * uncertainty;
 
                     // Calculate regularized photometric residual.
-                    regRes.at<float>(i) = sqrt(powf(res_c0 / sqrt(var_c0), 2) +
-                                               powf(res_c1 / sqrt(var_c1), 2) +
-                                               powf(res_c2 / sqrt(var_c2), 2));
+                    regRes.at<float>(i) = sqrt(powf(res_c0, 2) / var_c0 +
+                                               powf(res_c1, 2) / var_c1 +
+                                               powf(res_c2, 2) / var_c2);
 
 //                    cout << std::setw(7) << res_c0 << '\t' << res_c1 << '\t' << res_c2 << "\t\t"
 //                         << var_c0 << '\t' << var_c1 << '\t' << var_c2 << "\t\t"
