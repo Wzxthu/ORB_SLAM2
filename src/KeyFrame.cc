@@ -164,15 +164,17 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         // of the high gradient points in the reference keyframe.
         Mat depthVec = mDepthMap.reshape(0, mDepthMap.rows * mDepthMap.cols);
 
+        // Use all vertices for projection.
         Mat vertices(depthVec.rows, 3, CV_32F);
 #pragma omp parallel for
         for (int i = 0; i < mDepthMap.rows; ++i) {
             int row_cnt = i * mDepthMap.cols;
             for (int j = 0; j < mDepthMap.cols; ++j)
-                vertices.row(row_cnt++) = (Mat_<float>(1, 3) << j, i, 1) * mDepthMap.at<float>(i, j);
+                vertices.row(row_cnt + j) = (Mat_<float>(1, 3) << j, i, 1) * mDepthMap.at<float>(i, j);
         }
 
-        Mat Trel = pPrevKF->GetPose() * GetPoseInverse();
+        // Project to the previous keyframe.
+        Mat Trel = pPrevKF->GetPose() * GetPoseInverse();   // Translation matrix to the previous keyframe.
         vertices = (vertices * mInvK.t() * Trel.rowRange(0, 3).colRange(0, 3).t()
                     + repeat(Trel.col(3).rowRange(0, 3).t(), vertices.rows, 1)) * pPrevKF->mK.t();
         Mat proj2d = vertices.colRange(0, 2) / repeat(vertices.col(2), 1, 2);
@@ -184,39 +186,34 @@ void KeyFrame::EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEs
         bitwise_and(valid, proj2d.col(1) >= 0, valid, valid);
         bitwise_and(valid, proj2d.col(1) < pPrevKF->mDepthMap.rows, valid, valid);
 
-        // Estimate uncertainty on each valid point.
-        mUncertaintyMap = Mat(mDepthMap.rows * mDepthMap.cols, 1, CV_32F);
+        // Estimate uncertainty.
+        Mat uncertaintyVec = Mat(depthVec.rows, 1, CV_32F);
 #pragma omp parallel for
-        for (int i = 0; i < valid.rows; ++i)
+        for (int i = 0; i < valid.rows; ++i) {
             if (valid.at<uchar>(i)) {
-                auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1),
-                                                               proj2d.at<int>(i, 0));
-                auto proj_uncertainty = pPrevKF->mUncertaintyMap.at<float>(proj2d.at<int>(i, 1),
-                                                                           proj2d.at<int>(i, 0));
-                mUncertaintyMap.at<float>(i) = powf(depthVec.at<float>(i) - proj_depth, 2);
-                depthVec.at<float>(i) = (depthVec.at<float>(i) * proj_uncertainty
-                                         + proj_depth * mUncertaintyMap.at<float>(i)) /
-                                        (proj_uncertainty + mUncertaintyMap.at<float>(i));
-                mUncertaintyMap.at<float>(i) = (mUncertaintyMap.at<float>(i) * proj_uncertainty)
-                                               / (mUncertaintyMap.at<float>(i) + proj_uncertainty);
+                // Calculate uncertainty as square of depth estimation difference.
+                auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
+                auto proj_uncertainty = pPrevKF->mUncertaintyMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
+                float uncertainty = powf(depthVec.at<float>(i) - proj_depth, 2);
+
+                // Fuse depth estimation based on uncertainty.
+                depthVec.at<float>(i) = (depthVec.at<float>(i) * proj_uncertainty + proj_depth * uncertainty) /
+                                        (proj_uncertainty + uncertainty);
+                uncertaintyVec.at<float>(i) = (uncertainty * proj_uncertainty) / (uncertainty + proj_uncertainty);
+            } else {
+                // Initialize uncertainty for points not projected in frame as square of depth.
+                uncertaintyVec.at<float>(i) = powf(depthVec.at<float>(i), 2);
             }
+        }
+        // Reshape the depth vector and the uncertainty vector to maps.
         mDepthMap = depthVec.reshape(0, mDepthMap.rows);
-
-        // Set mean uncertainty to invalid points.
-        mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap, valid)[0]);
-#pragma omp parallel for
-        for (int i = 0; i < valid.rows; ++i)
-            if (!valid.at<uchar>(i))
-                mUncertaintyMap.at<float>(i) = mMeanUncertainty;
-
-        // Reshape back to same as the depth map.
-        mUncertaintyMap = mUncertaintyMap.reshape(0, mDepthMap.rows);
+        mUncertaintyMap = uncertaintyVec.reshape(0, mDepthMap.rows);
     } else {
         // No previous keyframe given.
         cv::pow(mDepthMap, 2, mUncertaintyMap);
-        mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     }
 
+    mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
     mHighGradPtSqrtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
@@ -341,7 +338,7 @@ void KeyFrame::UpdateBestCovisibles()
     }
 
     mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
-    mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());    
+    mvOrderedWeights = vector<int>(lWs.begin(), lWs.end());
 }
 
 set<KeyFrame*> KeyFrame::GetConnectedKeyFrames()
@@ -639,7 +636,7 @@ void KeyFrame::SetErase()
 }
 
 void KeyFrame::SetBadFlag()
-{   
+{
     {
         unique_lock<mutex> lock(mMutexConnections);
         if(mnId==0)
