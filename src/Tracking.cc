@@ -951,10 +951,10 @@ float Tracking::doLineStereo(
         cv::Mat KR = KT.colRange(0, 3).rowRange(0, 3);
         cv::Mat Kt = KT.col(3).rowRange(0, 3);
 
-        Eigen::Matrix otherToThis_R;
-        Eigen::Matrix otherToThis_t;
-        Eigen::Matrix K_otherToThis_R;
-        Eigen::Matrix K_otherToThis_t;
+        Eigen::Matrix3f otherToThis_R;
+        Eigen::Vector3f otherToThis_t;
+        Eigen::Matrix3f K_otherToThis_R;
+        Eigen::Vector3f K_otherToThis_t;
 
         cv::cv2eigen(R, otherToThis_R);
         cv::cv2eigen(t, otherToThis_t);
