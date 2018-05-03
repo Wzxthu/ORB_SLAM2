@@ -35,7 +35,7 @@
 #include"Optimizer.h"
 #include"PnPsolver.h"
 #include"util/settings.h"
-#include"util/global_funcs.h"
+#include"util/global_Funcs.h"
 
 #include<iostream>
 
