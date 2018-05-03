@@ -811,9 +811,9 @@ bool Tracking::makeAndCheckEPL(const int x, const int y, KeyFrame* const ref, fl
     // ======= make epl ========
     // calculate the plane spanned by the two camera centers and the point (x,y,1)
     // intersect it with the keyframe's image plane (at depth=1)
-    cv::Mat thisToOther_t = mCurrentFrame.mTcw * ref->GetPoseInverse();
-    float epx = - ref->fx * thisToOther_t.at<float>(2,0) + thisToOther_t.at<float>(2,2)*(x - ref->cx);
-    float epy = - ref->fy * thisToOther_t.at<float>(2,1) + thisToOther_t.at<float>(2,2)*(y - ref->cy);
+    cv::Mat thisToOther = mCurrentFrame.mTcw * ref->GetPoseInverse();
+    float epx = - ref->fx * thisToOther.at<float>(2,0) + thisToOther.at<float>(2,2)*(x - ref->cx);
+    float epy = - ref->fy * thisToOther.at<float>(2,1) + thisToOther.at<float>(2,2)*(y - ref->cy);
 
     if(std::isnan(epx+epy))
         return false;
@@ -862,7 +862,7 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
     if(!isGood) return false;
 
     // which exact point to track, and where from.
-    float depth = ref->mDepthMap.at<float>(x,y);
+    float depth = 1.0f / ref->mDepthMap.at<float>(x,y);
     float sv = sqrt(depth);
     float min_idepth = depth - sv*STEREO_EPL_VAR_FAC;
     float max_idepth = depth + sv*STEREO_EPL_VAR_FAC;
@@ -877,7 +877,7 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
             min_idepth, depth ,max_idepth,
             ref, result_idepth, result_var, result_eplLength);
 
-    float var = ref->mUncertaintyMap.at<float>(x,y);
+    float var = 1.0f / ref->mUncertaintyMap.at<float>(x,y);
     if(error == -1 or error == -2 or error == -3 or error == -4) {
         return false;
     }
@@ -894,19 +894,19 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
         // porpogation
         cv::Mat thisToOther_t = mCurrentFrame.mTcw * ref->GetPoseInverse();
         float tz = thisToOther_t.at<float>(2, 3);
-        float depth_t = UNZERO(new_idepth - tz)
+        float depth_t = 1.0f / UNZERO(1.0f / new_idepth - tz);
 
 
         // variance can only decrease from observation; never increase.
         id_var = id_var * w;
 //        if(id_var < var) {
-            float uncentainty_t = pow(ref->mDepthMap.at<float>(x,y) / new_idepth, 4) * id_var + result_var;
+            float uncentainty_t = pow(1.0f / ref->mDepthMap.at<float>(x,y) * new_idepth, 4) * id_var + result_var;
             //fusion
-            float ww = ref->mUncertaintyMap.at<float>(x, y) / uncentainty_t;
-            float depth_k = (ref->mDepthMap.at<float>(x,y) + ww * depth_t) / (1 + ww);
-            float uncertainty_k = ref->mUncertaintyMap.at<float>(x, y) / (1 + ww);
-            ref->mDepthMap.at<float>(x, y) = depth_k;
-            ref->mUncertaintyMap.at<float>(x, y) = uncertainty_k;
+            float ww = 1.0f / ref->mUncertaintyMap.at<float>(x, y) * uncentainty_t;
+            float depth_k = (1.0f / ref->mDepthMap.at<float>(x,y) + ww * depth_t) / (1 + ww);
+            float uncertainty_k = 1.0f / ref->mUncertaintyMap.at<float>(x, y) * (1 + ww);
+            ref->mDepthMap.at<float>(x, y) = 1.0f / depth_k;
+            ref->mUncertaintyMap.at<float>(x, y) = 1.0f / uncertainty_k;
 //        }
 
         return true;
@@ -929,10 +929,10 @@ float Tracking::doLineStereo(
     // returns: idepth_var: (approximated) measurement variance of inverse depth of result_point_NEW
     // returns error if sucessful; -1 if out of bounds, -2 if not found.
     {
-        float fxi = ref->fx;
-        float fyi = ref->fy;
-        float cxi = ref->cx;
-        float cyi = ref->cy;
+        float fxi = ref->mInvK.at<float>(0, 0);
+        float fyi = ref->mInvK.at<float>(1, 1);
+        float cxi = ref->mInvK.at<float>(0, 2);
+        float cyi = ref->mInvK.at<float>(1, 2);
 
         cv::Mat referenceFrameImage;
         cvCvtColor(&ref->mImColor, &referenceFrameImage, CV_RGB2GRAY);
@@ -1336,7 +1336,7 @@ float Tracking::doLineStereo(
         // calculate error from photometric noise
         float photoDispError = 4 * mCameraPixelNoise2 / (gradAlongLine + DIVISION_EPS);
 
-        float trackingErrorFac = 0.25*(1+ref->initialTrackedResidual);
+        float trackingErrorFac = 0.25 * (1 + ref->initialTrackedResidual);
 
         // calculate error from geometric noise (wrong camera pose / calibration)
         Eigen::Vector2f gradsInterp;
@@ -1367,8 +1367,38 @@ float Tracking::doLineStereo(
 
 void Tracking::DepthRefinement(KeyFrame* mpReferenceKF)
 {
-    for(int y = mCurrentFrame.mnMinY+1; y < mCurrentFrame.mnMaxY; y++)
-        for(int x = mCurrentFrame.mnMinX+1; x < mCurrentFrame.mnMaxX; x++) {
+    float fxi = mpReferenceKF->mInvK.at<float>(0, 0);
+    float fyi = mpReferenceKF->mInvK.at<float>(1, 1);
+    float cxi = mpReferenceKF->mInvK.at<float>(0, 2);
+    float cyi = mpReferenceKF->mInvK.at<float>(1, 2);
+    cv::Mat T = mCurrentFrame.mTcw * mpReferenceKF->GetPoseInverse();
+    Eigen::Vector3f trafoInv_t;
+    Eigen::Matrix3f trafoInv_R;
+    cv::Mat R = T.colRange(0, 3).rowRange(0, 3);
+    cv::Mat t = T.col(3).rowRange(0, 3);
+    cv::cv2eigen(R, trafoInv_R);
+    cv::cv2eigen(t, trafoInv_t);
+    cv::Size s = mImGray.size();
+    float height = s.height;
+    float width = s.width;
+
+    for(int y = mCurrentFrame.mnMinY; y < mCurrentFrame.mnMaxY; y++)
+        for(int x = mCurrentFrame.mnMinX; x < mCurrentFrame.mnMaxX; x++) {
+
+            Eigen::Vector3f pn = (trafoInv_R * Eigen::Vector3f(x*fxi + cxi,y*fyi + cyi,1.0f)) * mpReferenceKF->mDepthMap.at<float>(x, y) + trafoInv_t;
+
+            float new_idepth = 1.0f / pn[2];
+
+            float u_new = pn[0]*new_idepth*mCurrentFrame.fx + mCurrentFrame.cx;
+            float v_new = pn[1]*new_idepth*mCurrentFrame.fy + mCurrentFrame.cy;
+
+            // check if still within image, if not: DROP.
+            if(!(u_new > 2.1f && v_new > 2.1f && u_new < width-3.1f && v_new < height-3.1f))
+            {
+                continue;
+            }
+
+
             if (observeDepthUpdate(x, y, mpReferenceKF)) {
                 printf("Update Depth & Uncertainty successfully!\n");
             }

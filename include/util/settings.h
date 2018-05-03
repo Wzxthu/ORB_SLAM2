@@ -35,8 +35,6 @@ namespace cnn_slam {
     const float TRACKING_HUBER_DELTA =1.0;
     const float TRACKING_SOLVER_TIMECOST_RATIO = 0.5;
 
-    #define ALIGN __attribute__((__aligned__(16)))
-    #define SSEE(val,idx) (*(((float*)&val)+idx))
     #define DIVISION_EPS 1e-10f
     #define UNZERO(val) (val < 0 ? (val > -1e-10 ? -1e-10 : val) : (val < 1e-10 ? 1e-10 : val))
 
@@ -53,42 +51,9 @@ namespace cnn_slam {
     #define enablePrintDebugInfo true
     #endif
 
-    /** ============== constants for validity handeling ======================= */
-
-    // validity can take values between 0 and X, where X depends on the abs. gradient at that location:
-    // it is calculated as VALIDITY_COUNTER_MAX + (absGrad/255)*VALIDITY_COUNTER_MAX_VARIABLE
-    #define VALIDITY_COUNTER_MAX (5.0f)		// validity will never be higher than this
-    #define VALIDITY_COUNTER_MAX_VARIABLE (250.0f)		// validity will never be higher than this
-
-    #define VALIDITY_COUNTER_INC 5		// validity is increased by this on sucessfull stereo
-    #define VALIDITY_COUNTER_DEC 5		// validity is decreased by this on failed stereo
-    #define VALIDITY_COUNTER_INITIAL_OBSERVE 5	// initial validity for first observations
-
-
-    #define VAL_SUM_MIN_FOR_CREATE (30) // minimal summed validity over 5x5 region to create a new hypothesis for non-blacklisted pixel (hole-filling)
-    #define VAL_SUM_MIN_FOR_KEEP (24) // minimal summed validity over 5x5 region to keep hypothesis (regularization)
-    #define VAL_SUM_MIN_FOR_UNBLACKLIST (100) // if summed validity surpasses this, a pixel is un-blacklisted.
-
-    #define MIN_BLACKLIST -1	// if blacklist is SMALLER than this, pixel gets ignored. blacklist starts with 0.
-
-
-
 
     /** ============== Depth Variance Handeling ======================= */
     #define SUCC_VAR_INC_FAC (1.01f) // before an ekf-update, the variance is increased by this factor.
-    #define FAIL_VAR_INC_FAC 1.1f // after a failed stereo observation, the variance is increased by this factor.
-    #define MAX_VAR (0.5f*0.5f) // initial variance on creation - if variance becomes larter than this, hypothesis is removed.
-
-    #define VAR_GT_INIT_INITIAL 0.01f*0.01f	// initial variance vor Ground Truth Initialization
-    #define VAR_RANDOM_INIT_INITIAL (0.5f*MAX_VAR)	// initial variance vor Random Initialization
-
-
-
-
-
-    // Whether to use the gradients of source and target frame for tracking,
-    // or only the target frame gradient
-    #define USE_ESM_TRACKING 1
 
 
     #ifdef ANDROID
@@ -100,20 +65,6 @@ namespace cnn_slam {
     #define MAPPING_THREADS 4
     #define RELOCALIZE_THREADS 6
     #endif
-
-    #define SE3TRACKING_MIN_LEVEL 1
-    #define SE3TRACKING_MAX_LEVEL 5
-
-    #define SIM3TRACKING_MIN_LEVEL 1
-    #define SIM3TRACKING_MAX_LEVEL 5
-
-    #define QUICK_KF_CHECK_LVL 4
-
-    #define PYRAMID_LEVELS (SE3TRACKING_MAX_LEVEL > SIM3TRACKING_MAX_LEVEL ? SE3TRACKING_MAX_LEVEL : SIM3TRACKING_MAX_LEVEL)
-
-
-
-
 
     // ============== stereo & gradient calculation ======================
     #define MIN_DEPTH 0.05f // this is the minimal depth tested for stereo.
@@ -134,24 +85,6 @@ namespace cnn_slam {
 
     // defines how large the stereo-search region is. it is [mean] +/- [std.dev]*STEREO_EPL_VAR_FAC
     #define STEREO_EPL_VAR_FAC 2.0f
-
-
-
-
-    // ============== Smoothing and regularization ======================
-    // distance factor for regularization.
-    // is used as assumed inverse depth variance between neighbouring pixel.
-    // basically determines the amount of spacial smoothing (small -> more smoothing).
-    #define REG_DIST_VAR (0.075f*0.075f*depthSmoothingFactor*depthSmoothingFactor)
-
-    // define how strict the merge-processes etc. are.
-    // are multiplied onto the difference, so the larger, the more restrictive.
-    #define DIFF_FAC_SMOOTHING (1.0f*1.0f)
-    #define DIFF_FAC_OBSERVE (1.0f*1.0f)
-    #define DIFF_FAC_PROP_MERGE (1.0f*1.0f)
-    #define DIFF_FAC_INCONSISTENT (1.0f * 1.0f)
-
-
 
 
     // ============== initial stereo pixel selection ======================
