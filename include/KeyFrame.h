@@ -127,6 +127,11 @@ public:
 
     // The following variables are accesed from only 1 thread or never change (no mutex needed).
 public:
+
+    cv::Mat mImGray;
+    cv::Mat mImColor;
+    float initialTrackedResidual;
+
     // Dense depth map.
     cv::Mat mDepthMap;
     cv::Mat mUncertaintyMap;
