@@ -894,13 +894,20 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
         // porpogation
         cv::Mat thisToOther_t = mCurrentFrame.mTcw * ref->GetPoseInverse();
         float tz = thisToOther_t.at<float>(2, 3);
-        ref->mDepthMap.at<float>(x,y) = UNZERO(new_idepth - tz) ;
+        float depth_t = UNZERO(new_idepth - tz)
+
 
         // variance can only decrease from observation; never increase.
         id_var = id_var * w;
-        if(id_var < var) {
-            ref->mUncertaintyMap.at<float>(x, y) =  pow(ref->mDepthMap.at<float>(x,y) / new_idepth, 4) * id_var + result_var;
-        }
+//        if(id_var < var) {
+            float uncentainty_t = pow(ref->mDepthMap.at<float>(x,y) / new_idepth, 4) * id_var + result_var;
+            //fusion
+            float ww = ref->mUncertaintyMap.at<float>(x, y) / uncentainty_t;
+            float depth_k = (ref->mDepthMap.at<float>(x,y) + ww * depth_t) / (1 + ww);
+            float uncertainty_k = ref->mUncertaintyMap.at<float>(x, y) / (1 + ww);
+            ref->mDepthMap.at<float>(x, y) = depth_k;
+            ref->mUncertaintyMap.at<float>(x, y) = uncertainty_k;
+//        }
 
         return true;
     }
