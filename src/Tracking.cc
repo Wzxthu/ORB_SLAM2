@@ -828,8 +828,8 @@ bool Tracking::makeAndCheckEPL(const int x, const int y, KeyFrame* const ref, fl
 
 
     // ===== check epl-grad magnitude ======
-    float gx = mImGray.at<float>(x,y) - mImGray.at<float>(x-1,y);
-    float gy = mImGray.at<float>(x,y) - mImGray.at<float>(x,y-1);
+    float gx = mImGray.at<float>(y,x) - mImGray.at<float>(y,x-1);
+    float gy = mImGray.at<float>(y,x) - mImGray.at<float>(y-1,x);
     float eplGradSquared = gx * epx + gy * epy;
     eplGradSquared = eplGradSquared*eplGradSquared / eplLengthSquared;	// square and norm with epl-length
 
@@ -862,7 +862,7 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
     if(!isGood) return false;
 
     // which exact point to track, and where from.
-    float depth = 1.0f / ref->mDepthMap.at<float>(x,y);
+    float depth = 1.0f / ref->mDepthMap.at<float>(y,x);
     float sv = sqrt(depth);
     float min_idepth = depth - sv*STEREO_EPL_VAR_FAC;
     float max_idepth = depth + sv*STEREO_EPL_VAR_FAC;
@@ -877,7 +877,7 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
             min_idepth, depth ,max_idepth,
             ref, result_idepth, result_var, result_eplLength);
 
-    float var = 1.0f / ref->mUncertaintyMap.at<float>(x,y);
+    float var = 1.0f / ref->mUncertaintyMap.at<float>(y,x);
     if(error == -1 or error == -2 or error == -3 or error == -4) {
         return false;
     }
@@ -900,13 +900,13 @@ bool Tracking::observeDepthUpdate(const int &x, const int &y, KeyFrame* const re
         // variance can only decrease from observation; never increase.
         id_var = id_var * w;
 //        if(id_var < var) {
-            float uncentainty_t = pow(1.0f / ref->mDepthMap.at<float>(x,y) * new_idepth, 4) * id_var + result_var;
+            float uncentainty_t = pow(1.0f / ref->mDepthMap.at<float>(y, x) * new_idepth, 4) * id_var + result_var;
             //fusion
-            float ww = 1.0f / ref->mUncertaintyMap.at<float>(x, y) * uncentainty_t;
-            float depth_k = (1.0f / ref->mDepthMap.at<float>(x,y) + ww * depth_t) / (1 + ww);
-            float uncertainty_k = 1.0f / ref->mUncertaintyMap.at<float>(x, y) * (1 + ww);
-            ref->mDepthMap.at<float>(x, y) = 1.0f / depth_k;
-            ref->mUncertaintyMap.at<float>(x, y) = 1.0f / uncertainty_k;
+            float ww = 1.0f / ref->mUncertaintyMap.at<float>(y, x) * uncentainty_t;
+            float depth_k = (1.0f / ref->mDepthMap.at<float>(y, x) + ww * depth_t) / (1 + ww);
+            float uncertainty_k = 1.0f / ref->mUncertaintyMap.at<float>(y, x) * (1 + ww);
+            ref->mDepthMap.at<float>(y, x) = 1.0f / depth_k;
+            ref->mUncertaintyMap.at<float>(y, x) = 1.0f / uncertainty_k;
 //        }
 
         return true;
@@ -935,7 +935,7 @@ float Tracking::doLineStereo(
         float cyi = ref->mInvK.at<float>(1, 2);
 
         cv::Mat referenceFrameImage;
-        cvCvtColor(&ref->mImColor, &referenceFrameImage, CV_RGB2GRAY);
+        cv::cvtColor(ref->mImColor, referenceFrameImage, CV_RGB2GRAY);
         cv::Mat FrameImageData = mImGray;
         cv::Size s = referenceFrameImage.size();
 
@@ -944,7 +944,9 @@ float Tracking::doLineStereo(
 
         cv::Mat thisToOther_t = mCurrentFrame.mTcw * ref->GetPoseInverse();
         cv::Mat T = ref->GetPose() * mCurrentFrame.mTcw.inv();
-        cv::Mat KT = ref->mK * T;
+        cv::Mat KT = cv::Mat::zeros(cv::Size(4, 4), CV_64FC1);
+        KT.colRange(0, 4).rowRange(0, 3) = ref->mK * T.colRange(0, 4).rowRange(0, 3);
+        KT.at<float>(3, 3) = 1;
         
         cv::Mat R = T.colRange(0, 3).rowRange(0, 3);
         cv::Mat t = T.col(3).rowRange(0, 3);
@@ -1385,7 +1387,7 @@ void Tracking::DepthRefinement(KeyFrame* mpReferenceKF)
     for(int y = mCurrentFrame.mnMinY; y < mCurrentFrame.mnMaxY; y++)
         for(int x = mCurrentFrame.mnMinX; x < mCurrentFrame.mnMaxX; x++) {
 
-            Eigen::Vector3f pn = (trafoInv_R * Eigen::Vector3f(x*fxi + cxi,y*fyi + cyi,1.0f)) * mpReferenceKF->mDepthMap.at<float>(x, y) + trafoInv_t;
+            Eigen::Vector3f pn = (trafoInv_R * Eigen::Vector3f(x*fxi + cxi,y*fyi + cyi,1.0f)) * mpReferenceKF->mDepthMap.at<float>(y, x) + trafoInv_t;
 
             float new_idepth = 1.0f / pn[2];
 
@@ -1403,7 +1405,7 @@ void Tracking::DepthRefinement(KeyFrame* mpReferenceKF)
                 printf("Update Depth & Uncertainty successfully!\n");
             }
             else {
-                printf("Update Depth & Uncertainty unsuccessfully!\n");
+//                printf("Update Depth & Uncertainty unsuccessfully!\n");
             }
         }
 }
@@ -1438,7 +1440,7 @@ bool Tracking::TrackReferenceKeyFrame()
     mCurrentFrame.SetPose(Tcw);
 
     // Frame-wise depth refinement
-    DepthRefinement(mpReferenceKF);
+//    DepthRefinement(mpReferenceKF);
 
     // Discard outliers
     int nmatchesMap = 0;

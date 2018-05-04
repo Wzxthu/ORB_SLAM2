@@ -130,7 +130,7 @@ public:
 
     cv::Mat mImGray;
     cv::Mat mImColor;
-    float initialTrackedResidual;
+    float initialTrackedResidual = 0.01;
 
     // Dense depth map.
     cv::Mat mDepthMap;
