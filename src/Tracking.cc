@@ -564,7 +564,7 @@ void Tracking::StereoInitialization()
 
         // Create KeyFrame
         KeyFrame* pKFini = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
-                                        mImColor,mpDepthEstimator,nullptr,mCurrentFrame.focalLength);
+                                        mImColor,mpDepthEstimator,nullptr,mCurrentFrame.focalLength, mCameraPixelNoise2);
 
         // Insert KeyFrame in the map
         mpMap->AddKeyFrame(pKFini);
@@ -688,9 +688,9 @@ void Tracking::CreateInitialMapMonocular()
 {
     // Create KeyFrames
     KeyFrame* pKFini = new KeyFrame(mInitialFrame,mpMap,mpKeyFrameDB,
-                                    mImColor,mpDepthEstimator,nullptr,mInitialFrame.focalLength);
+                                    mImColor,mpDepthEstimator,nullptr,mInitialFrame.focalLength,mCameraPixelNoise2);
     KeyFrame* pKFcur = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
-                                    mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength);
+                                    mImColor,mpDepthEstimator,pKFini,mCurrentFrame.focalLength,mCameraPixelNoise2);
 
 
     pKFini->ComputeBoW();
@@ -1751,7 +1751,8 @@ void Tracking::CreateNewKeyFrame()
     if(!mpLocalMapper->SetNotStop(true))
         return;
 
-    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,mImColor,mpDepthEstimator,mCurrentFrame.mpReferenceKF,mCurrentFrame.focalLength);
+    KeyFrame* pKF = new KeyFrame(mCurrentFrame,mpMap,mpKeyFrameDB,
+        mImColor,mpDepthEstimator,mCurrentFrame.mpReferenceKF,mCurrentFrame.focalLength, mCameraPixelNoise2);
 
     mpReferenceKF = pKF;
     mCurrentFrame.mpReferenceKF = pKF;

@@ -82,7 +82,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
                    cv::Mat imColor,
                    cnn_slam::DepthEstimator *pDepthEstimator,
                    KeyFrame *pPrevKF,
-                   float focalLength):
+                   float focalLength,
+                   float cameraPixelNoise2):
     mImColor(imColor), mnFrameId(F.mnId),  mTimeStamp(F.mTimeStamp), mnGridCols(FRAME_GRID_COLS), mnGridRows(FRAME_GRID_ROWS),
     mfGridElementWidthInv(F.mfGridElementWidthInv), mfGridElementHeightInv(F.mfGridElementHeightInv),
     mnTrackReferenceForFrame(0), mnFuseTargetForKF(0), mnBALocalForKF(0), mnBAFixedForKF(0),
@@ -114,8 +115,8 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
 
         SetNotErase();
         if (pPrevKF) pPrevKF->SetNotErase();
-        thread depth_estimation_thread([this, imColor, pDepthEstimator, pPrevKF, focalLength]() {
-          EstimateDepth(imColor, pDepthEstimator, pPrevKF, focalLength);
+        thread depth_estimation_thread([this, imColor, pDepthEstimator, pPrevKF, focalLength, cameraPixelNoise2]() {
+          EstimateDepth(imColor, pDepthEstimator, pPrevKF, focalLength, cameraPixelNoise2);
         });
         depth_estimation_thread.detach();
     } else {
@@ -131,7 +132,8 @@ KeyFrame::~KeyFrame() {
 void KeyFrame::EstimateDepth(cv::Mat imColor,
                              cnn_slam::DepthEstimator *pDepthEstimator,
                              KeyFrame *pPrevKF,
-                             float focalLength) {
+                             float focalLength,
+                             float cameraPixelNoise2) {
     mbWorking = true;
     mbDepthReady = false;
 
@@ -182,7 +184,8 @@ void KeyFrame::EstimateDepth(cv::Mat imColor,
             if (valid.at<uchar>(i)) {
                 // Calculate uncertainty as square of depth estimation difference.
                 auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
-                auto proj_uncertainty = pPrevKF->mUncertaintyMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
+                auto proj_uncertainty = pPrevKF->mUncertaintyMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0))
+                    * proj_depth / depthVec.at<float>(i) + cameraPixelNoise2;
                 float uncertainty = powf(depthVec.at<float>(i) - proj_depth, 2);
 
                 // Fuse depth estimation based on uncertainty.

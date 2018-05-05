@@ -47,11 +47,13 @@ public:
              cv::Mat imColor = cv::Mat(),
              cnn_slam::DepthEstimator *pDepthEstimator = nullptr,
              KeyFrame *pPrevKF = nullptr,
-             float focalLength = 0);
+             float focalLength = 0,
+             float cameraPixelNoise2 = 16);
 
     ~KeyFrame();
 
-    void EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF, float focalLength);
+    void EstimateDepth(cv::Mat imColor, cnn_slam::DepthEstimator *pDepthEstimator, KeyFrame *pPrevKF,
+                       float focalLength, float cameraPixelNoise2);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
