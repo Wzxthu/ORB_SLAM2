@@ -145,6 +145,15 @@ protected:
 
     bool NeedNewKeyFrame();
     void CreateNewKeyFrame();
+    bool makeAndCheckEPL(const int x, const int y, KeyFrame* const ref, float* pepx, float* pepy);
+    bool observeDepthUpdate(const int &x, const int &y, KeyFrame* const ref);
+    float doLineStereo(
+            const float u, const float v, const float epxn, const float epyn,
+            const float min_idepth, const float prior_idepth, float max_idepth,
+            KeyFrame* const referenceFrame,
+            float &result_idepth, float &result_var, float &result_eplLength);
+    void DepthRefinement(KeyFrame* mpReferenceKF);
+
 
     // In case of performing only localization, this flag is true when there are no matches to
     // points in the map. Still tracking will continue if there are enough matches with temporal points.

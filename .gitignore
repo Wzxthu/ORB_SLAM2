@@ -1,5 +1,6 @@
 # Images for diagnostic
 *.jpg
+rgbd*
 
 # CNN models
 *.ckpt*

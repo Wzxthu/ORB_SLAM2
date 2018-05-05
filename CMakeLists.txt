@@ -49,7 +49,9 @@ endif()
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
 find_package(PythonLibs 2.7 REQUIRED)
-find_package(NumPy REQUIRED)
+if(NOT PYTHON_NUMPY_INCLUDE_DIR)
+    find_package(NumPy REQUIRED)
+endif()
 
 include_directories(
 ${PROJECT_SOURCE_DIR}
