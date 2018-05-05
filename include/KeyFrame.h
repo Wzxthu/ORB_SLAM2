@@ -130,7 +130,6 @@ public:
     // Dense depth map.
     cv::Mat mDepthMap;
     cv::Mat mUncertaintyMap;
-    float mMeanUncertainty;
     bool mbDepthReady;
     // Selected high gradient points and their data.
     cv::Mat mHighGradPtHomo2dCoord; // Nx3 float.
@@ -241,7 +240,7 @@ protected:
     // Bad flags
     bool mbNotErase;
     bool mbToBeErased;
-    bool mbBad;    
+    bool mbBad;
 
     float mHalfBaseline; // Only for visualization
 

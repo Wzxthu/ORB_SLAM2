@@ -28,7 +28,6 @@
 
 #include <KeyFrame.h>
 #include <opencv2/opencv.hpp>
-#include <util/settings.h>
 
 namespace cnn_slam {
 

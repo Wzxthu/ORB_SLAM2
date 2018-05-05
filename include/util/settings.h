@@ -31,7 +31,7 @@
 #include <cmath>
 
 namespace cnn_slam {
-    const unsigned int TRACKING_NUM_PT = 1024;
+    const float MIN_USE_GRAD = 5.f;
     const float TRACKING_HUBER_DELTA =1.0;
     const float TRACKING_SOLVER_TIMECOST_RATIO = 0.5;
 }

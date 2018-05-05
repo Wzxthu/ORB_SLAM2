@@ -40,6 +40,7 @@
 #include <unistd.h>
 #include <DepthEstimation/DepthEstimatorFCRN.h>
 #include <DepthEstimation/DepthEstimatorFake.h>
+#include <util/settings.h>
 
 
 using namespace std;

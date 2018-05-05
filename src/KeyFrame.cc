@@ -31,15 +31,14 @@ namespace ORB_SLAM2
 
 long unsigned int KeyFrame::nNextId=0;
 
-inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor, int numPt) {
+inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor) {
     using namespace cv;
     using namespace cnn_slam;
 
     // Find high gradient points.
     // For efficiency, we first down-sample the image by 4,
-    // then find top TRACKING_NUM_PT/16 points with greatest gradient.
+    // then find points with great enough gradient.
     // The finally selected points are points from the 4x4 pathces around the corresponding points.
-    int numPatch = numPt >> 4;
     Mat smallIm;
     resize(imColor, smallIm, Size(imColor.cols >> 2, imColor.rows >> 2));
     GaussianBlur(smallIm, smallIm, Size(3,3), 0, 0, BORDER_DEFAULT );
@@ -48,28 +47,24 @@ inline cv::Mat SelectHighGradientPoints(const cv::Mat& imColor, int numPt) {
     Laplacian(smallIm, grad, CV_16S, 3);
     convertScaleAbs(grad, grad);    // Convert to CV_8U image.
 
-    // Sort the gradients.
-    typedef pair<uchar, Point2i> GradInfo;
-    vector<GradInfo> gradCoord;
-    gradCoord.reserve(static_cast<unsigned long>(grad.rows * grad.cols));
+    vector<Point2i> seletecCoord;
+    seletecCoord.reserve(static_cast<unsigned long>(grad.rows * grad.cols));
     for (int i = 0; i < grad.rows; ++i) {
         auto gradRow = grad.ptr<uchar>(i);
         for (int j = 0; j < grad.cols; ++j) {
-            gradCoord.emplace_back(gradRow[j],
-                                   Point2i(j, i));
+            if (gradRow[j] > MIN_USE_GRAD) {
+                seletecCoord.emplace_back(Point2i(j, i));
+            }
         }
     }
-    sort(gradCoord.begin(), gradCoord.end(), [](const GradInfo &p1, const GradInfo &p2) {
-        return p1.first > p2.first; // Sort in descending order.
-    });
 
     // Recover original coordinates and extract data.
-    Mat highGradPtHomo2dCoord = Mat::ones(numPt, 3, CV_32F);
-    highGradPtHomo2dCoord.col(2) = Mat::ones(numPt, 1, CV_32F);
+    Mat highGradPtHomo2dCoord = Mat::ones(static_cast<int>(seletecCoord.size() << 4), 3, CV_32F);
+    highGradPtHomo2dCoord.col(2) = Mat::ones(highGradPtHomo2dCoord.rows, 1, CV_32F);
 #pragma omp parallel for
-    for (int i = 0; i < numPatch; ++i) {
-        int x = gradCoord[i].second.x << 2;
-        int y = gradCoord[i].second.y << 2;
+    for (int i = 0; i < seletecCoord.size(); ++i) {
+        int x = seletecCoord[i].x << 2;
+        int y = seletecCoord[i].y << 2;
         int row = i * 16;
         for (int dx = 0; dx < 4; ++dx) {
             for (int dy = 0; dy < 4; ++dy) {
@@ -115,7 +110,7 @@ KeyFrame::KeyFrame(Frame &F, Map *pMap, KeyFrameDatabase *pKFDB,
     SetPose(F.mTcw);
 
     if (!imColor.empty() and pDepthEstimator) {
-        mHighGradPtHomo2dCoord = SelectHighGradientPoints(imColor, cnn_slam::TRACKING_NUM_PT << 1);
+        mHighGradPtHomo2dCoord = SelectHighGradientPoints(imColor);
 
         SetNotErase();
         if (pPrevKF) pPrevKF->SetNotErase();
@@ -210,43 +205,20 @@ void KeyFrame::EstimateDepth(cv::Mat imColor,
     }
 
     // Calculate mean uncertainty.
-    mMeanUncertainty = static_cast<float>(mean(mUncertaintyMap)[0]);
     mHighGradPtUncertainty = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
 
     // Select points from the high gradient points with low depth uncertainty.
-#pragma omp parallel for
-    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i) {
-        auto x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
-        auto y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
-        mHighGradPtUncertainty.at<float>(i) = mUncertaintyMap.at<float>(y, x);
-    }
-    // Sort the depth uncertainty vector and save indices.
-    cv::Mat1i idx;
-    cv::sortIdx(mHighGradPtUncertainty, idx, cv::SORT_EVERY_COLUMN + cv::SORT_ASCENDING);
-    // Pick the points with lowest uncertainty.
-    Mat coordSrc = mHighGradPtHomo2dCoord;
-    mHighGradPtHomo2dCoord = mHighGradPtHomo2dCoord.rowRange(0, cnn_slam::TRACKING_NUM_PT).clone();
-    mHighGradPtUncertainty = mHighGradPtUncertainty.rowRange(0, cnn_slam::TRACKING_NUM_PT);
     mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtDepth = Mat(mHighGradPtHomo2dCoord.rows, 1, CV_32F);
     mHighGradPtPixels = Mat(mHighGradPtHomo2dCoord.rows, 3, CV_8U);
 #pragma omp parallel for
-    for(int i = 0; i < cnn_slam::TRACKING_NUM_PT; i++){
-        int srcIdx = idx(0, i);
-        auto x = static_cast<int>(coordSrc.at<float>(srcIdx, 0));
-        auto y = static_cast<int>(coordSrc.at<float>(srcIdx, 1));
-        mHighGradPtHomo2dCoord.at<float>(i, 0) = x;
-        mHighGradPtHomo2dCoord.at<float>(i, 1) = y;
+    for(int i = 0; i < mHighGradPtHomo2dCoord.rows; i++){
+        auto x = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0));
+        auto y = static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1));
         mHighGradPtDepth.at<float>(i) = mDepthMap.at<float>(y, x);
         mHighGradPtPixels.row(i) = imColor.col(x).row(y).reshape(1, 3);
         mHighGradPtUncertainty.at<float>(i) = mUncertaintyMap.at<float>(y, x);
     }
-
-//    Mat canvas = imColor.clone();
-//    for (int i = 0; i < mHighGradPtHomo2dCoord.rows; ++i)
-//        cv::circle(canvas, Point(static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 0)),
-//                                 static_cast<int>(mHighGradPtHomo2dCoord.at<float>(i, 1))), 2, Scalar(255, 0, 0));
-//    imwrite("selected.jpg", canvas);
 
     mbDepthReady = true;
     mbWorking = false;

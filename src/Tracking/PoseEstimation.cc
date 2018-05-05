@@ -52,23 +52,26 @@ namespace cnn_slam {
         Mat imGradY;
         ORB_SLAM2::KeyFrame *pRefKF;
         Mat Kt;      // Transposed calibration matrix.
-        Mat invKt;   // Transposed inverse calibration matrix.
         float cameraPixelNoise2;
+        Mat highGradPt3dVertex;
+        Mat highGradPt3dVertexRight;
 
         CostFunctor(Mat imColor,
                     Mat imGradX,
                     Mat imGradY,
                     ORB_SLAM2::KeyFrame *pReferenceKF,
                     const Mat &K,
-                    const Mat &invK,
-                    float cameraPixelNoise2)
+                    float cameraPixelNoise2,
+                    Mat highGradPt3dVertex,
+                    Mat highGradPt3dVertexRight)
                 : imColor(std::move(imColor)),
                   imGradX(std::move(imGradX)),
                   imGradY(std::move(imGradY)),
                   pRefKF(pReferenceKF),
                   Kt(K.t()),
-                  invKt(invK.t()),
-                  cameraPixelNoise2(cameraPixelNoise2) {}
+                  cameraPixelNoise2(cameraPixelNoise2),
+                  highGradPt3dVertex(std::move(highGradPt3dVertex)),
+                  highGradPt3dVertexRight(std::move(highGradPt3dVertexRight)) {}
 
         template<class T>
         bool operator()(const T *const r, const T *const t, T *residual) const {
@@ -93,9 +96,7 @@ namespace cnn_slam {
 
             // Calculate projected 2D location in the current frame
             // of the high gradient points in the reference keyframe.
-            Mat proj3d = (repeat(pRefKF->mHighGradPtDepth, 1, 3)
-                                  .mul(pRefKF->mHighGradPtHomo2dCoord)
-                          * invKt * Rt + tt) * Kt;
+            Mat proj3d = (highGradPt3dVertex * Rt + tt) * Kt;
             Mat proj2d = proj3d.colRange(0, 2) / repeat(proj3d.col(2), 1, 2);
 
             // Round the projected 2D locations.
@@ -106,9 +107,7 @@ namespace cnn_slam {
             Mat proj2d_offset = proj2d - proj2d_round_f;
 
             // Numericly calculate differential of projected 2D coordinates regarding depths.
-            Mat proj3d_right = (repeat(pRefKF->mHighGradPtDepth + 0.01, 1, 3)
-                                        .mul(pRefKF->mHighGradPtHomo2dCoord)
-                                * invKt * Rt + tt) * Kt;
+            Mat proj3d_right = (highGradPt3dVertexRight * Rt + tt) * Kt;
             Mat proj2d_right = proj3d_right.colRange(0, 2) / repeat(proj3d_right.col(2), 1, 2);
             Mat coord_deriv = (proj2d_right - proj2d) / 0.01;
 
@@ -120,9 +119,7 @@ namespace cnn_slam {
 
             if (!sum(valid)[0]) {
                 // The current transform is absolutely incorrect, because there is no point projected into the frame.
-//                cout << "No valid points!" << endl;
-                for (int i = 0; i < valid.rows; ++i)
-                    residual[i] = 100;
+                *residual = 255;
                 return true;
             }
 
@@ -167,34 +164,11 @@ namespace cnn_slam {
                     regRes.at<float>(i) = sqrt(powf(res_c0, 2) / var_c0 +
                                                powf(res_c1, 2) / var_c1 +
                                                powf(res_c2, 2) / var_c2);
-
-//                    cout << std::setw(7) << res_c0 << '\t' << res_c1 << '\t' << res_c2 << "\t\t"
-//                         << var_c0 << '\t' << var_c1 << '\t' << var_c2 << "\t\t"
-//                         << gradX[0] << '\t' << gradX[1] << '\t' << gradX[2] << "\t\t"
-//                         << gradY[0] << '\t' << gradY[1] << '\t' << gradY[2] << "\t\t"
-//                         << der_c0 << '\t' << der_c1 << '\t' << der_c2 << "\t\t"
-//                         << coord_deriv.at<float>(i, 0) << '\t' << coord_deriv.at<float>(i, 1) << "\t\t"
-//                         << pRefKF->mHighGradPtSqrtUncertainty.row(i) << std::setw(0) << endl;
-                }
-            }
-//            cout << regRes.t() << endl;
-
-            // Set the invalid points to mean residual.
-            float meanRes = static_cast<float>(mean(regRes, valid)[0]);
-#pragma omp parallel for
-            for (int i = 0; i < valid.rows; ++i) {
-                if (!valid.at<uchar>(i)) {
-                    regRes.at<float>(i) = meanRes;
                 }
             }
 
-//            cout << meanRes << endl;
-//            cout << regRes.t() << endl;
-
-            // Fill the residual.
-            regRes.convertTo(regRes, type);
-            assert(regRes.isContinuous());
-            memcpy(residual, regRes.data, sizeof(T) * regRes.rows);
+            // Set the residual to mean residual.
+            *residual = static_cast<float>(mean(regRes, valid)[0]);
             return true;
         }
     };
@@ -234,25 +208,30 @@ namespace cnn_slam {
         cv::Sobel(imColor, imGradX, CV_32F, 1, 0, 3);
         cv::Sobel(imColor, imGradY, CV_32F, 0, 1, 3);
 
-        // Construct the optimization problem.
-        Problem problem;
-        CostFunction *cost_function = new NumericDiffCostFunction<CostFunctor, RIDDERS, TRACKING_NUM_PT, 3, 3>(
-                new CostFunctor(imColor, imGradX, imGradY, pRefKF, K, invK, cameraPixelNoise2));
-        auto *loss_function = new LossFunctionWrapper(new HuberLoss(TRACKING_HUBER_DELTA), TAKE_OWNERSHIP);
-        problem.AddResidualBlock(cost_function, loss_function, relRotationRodrigues, relTranslation);
-
         // Wait until the depth map of the keyframe is ready.
         while (!pRefKF->mbDepthReady)
             usleep(1000);
+
+        // Precalculate 3D vertices with high gradients.
+        Mat highGradPt3dVertex = repeat(pRefKF->mHighGradPtDepth, 1, 3).mul(pRefKF->mHighGradPtHomo2dCoord) * pRefKF->mInvK.t();
+        Mat highGradPt3dVertexRight = repeat(pRefKF->mHighGradPtDepth + 0.01, 1, 3).mul(pRefKF->mHighGradPtHomo2dCoord) * pRefKF->mInvK.t();
+
+        // Construct the optimization problem.
+        Problem problem;
+        CostFunction *cost_function = new NumericDiffCostFunction<CostFunctor, RIDDERS, 1, 3, 3>(
+                new CostFunctor(imColor, imGradX, imGradY,
+                                pRefKF, K, cameraPixelNoise2,
+                                highGradPt3dVertex, highGradPt3dVertexRight));
+        auto *loss_function = new LossFunctionWrapper(new HuberLoss(TRACKING_HUBER_DELTA), TAKE_OWNERSHIP);
+        problem.AddResidualBlock(cost_function, loss_function, relRotationRodrigues, relTranslation);
 
         // Start solving.
         Solver::Options options;
         options.num_threads = thread::hardware_concurrency();   // Use all cores.
         options.max_solver_time_in_seconds = max_seconds; // Enforce real-time.
         Solver::Summary summary;
-//        cout << "Start solving..." << endl;
         ceres::Solve(options, &problem, &summary);
-//        cout << "Solver finished with final cost " << summary.final_cost << "!" << endl << flush;
+        cout << "Solver finished with final cost " << summary.final_cost << "!" << endl << flush;
 
         // Recover the transform matrix from the optimized pose vector.
         Mat Rrel;
@@ -275,8 +254,7 @@ namespace cnn_slam {
             // Calculate projected 2D location in the current frame
             // of the high gradient points in the reference keyframe.
             Mat proj3d =
-                    (repeat(pRefKF->mHighGradPtDepth, 1, 3).mul(pRefKF->mHighGradPtHomo2dCoord)
-                     * pRefKF->mInvK.t() * Rrel.t() +
+                    (highGradPt3dVertex * Rrel.t() +
                      repeat(Trel.col(3).rowRange(0, 3).t(), pRefKF->mHighGradPtDepth.rows, 1))
                     * K;
             Mat proj2d = proj3d.colRange(0, 2) / repeat(proj3d.col(2), 1, 2);
@@ -290,6 +268,6 @@ namespace cnn_slam {
             *validRatio = static_cast<float>(sum(valid)[0] / 255 / valid.rows);
         }
 
-        return static_cast<float>(summary.final_cost) / TRACKING_NUM_PT;
+        return static_cast<float>(summary.final_cost);
     }
 }
