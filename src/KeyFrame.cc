@@ -141,6 +141,7 @@ void KeyFrame::EstimateDepth(cv::Mat imColor,
 
     // Estimate depth.
     pDepthEstimator->EstimateDepth(imColor, mDepthMap, focalLength);
+    cout << "Mean depth: " << cv::mean(mDepthMap) << endl;
 //    imwrite("image.jpg", imColor);
 //    Mat depthDisplay;
 //    double minDepth, maxDepth;
@@ -185,8 +186,8 @@ void KeyFrame::EstimateDepth(cv::Mat imColor,
                 // Calculate uncertainty as square of depth estimation difference.
                 auto proj_depth = pPrevKF->mDepthMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0));
                 auto proj_uncertainty = pPrevKF->mUncertaintyMap.at<float>(proj2d.at<int>(i, 1), proj2d.at<int>(i, 0))
-                    * proj_depth / depthVec.at<float>(i) + cameraPixelNoise2;
-                float uncertainty = powf(depthVec.at<float>(i) - proj_depth, 2);
+                    * proj_depth / (depthVec.at<float>(i) + 0.001f) + 2 * cameraPixelNoise2;
+                float uncertainty = powf(depthVec.at<float>(i) - proj_depth, 2) + 2 * cameraPixelNoise2;
 
                 // Fuse depth estimation based on uncertainty.
                 depthVec.at<float>(i) = (depthVec.at<float>(i) * proj_uncertainty + proj_depth * uncertainty) /

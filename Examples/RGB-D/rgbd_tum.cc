@@ -62,6 +62,8 @@ int main(int argc, char **argv)
         return 1;
     }
 
+    nImages = 32;
+
     // Create SLAM system. It initializes all system threads and gets ready to process frames.
     ORB_SLAM2::System SLAM(argv[1],argv[2],ORB_SLAM2::System::RGBD,true);
 
@@ -77,6 +79,8 @@ int main(int argc, char **argv)
     cv::Mat imRGB, imD;
     for(int ni=0; ni<nImages; ni++)
     {
+        cout << "At frame " << ni << ":" << endl;
+
         // Read image and depthmap from file
         imRGB = cv::imread(string(argv[3])+"/"+vstrImageFilenamesRGB[ni],CV_LOAD_IMAGE_UNCHANGED);
         imD = cv::imread(string(argv[3])+"/"+vstrImageFilenamesD[ni],CV_LOAD_IMAGE_UNCHANGED);
@@ -122,6 +126,8 @@ int main(int argc, char **argv)
     // Stop all threads
     SLAM.Shutdown();
 
+    cout << "Evaluating tracking statistics." << endl;
+
     // Tracking time statistics
     sort(vTimesTrack.begin(),vTimesTrack.end());
     float totaltime = 0;
@@ -135,7 +141,7 @@ int main(int argc, char **argv)
 
     // Save camera trajectory
     SLAM.SaveTrajectoryTUM("CameraTrajectory.txt");
-    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");   
+    SLAM.SaveKeyFrameTrajectoryTUM("KeyFrameTrajectory.txt");
 
     return 0;
 }
