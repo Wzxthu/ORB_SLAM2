@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 echo "Configuring and building Thirdparty/DBoW2 ..."
 
 cd Thirdparty/DBoW2
@@ -29,3 +30,10 @@ mkdir build
 cd build
 cmake .. -DCMAKE_BUILD_TYPE=Release
 make -j
+cd ..
+
+mkdir -p model
+cd model
+#wget https://pjreddie.com/media/files/yolov3-tiny.weights
+wget https://pjreddie.com/media/files/yolov3.weights
+cd ..

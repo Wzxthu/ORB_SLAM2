@@ -26,6 +26,7 @@
 #include "LoopClosing.h"
 #include "Tracking.h"
 #include "KeyFrameDatabase.h"
+#include "ObjectDetector.h"
 
 #include <mutex>
 
@@ -45,6 +46,8 @@ public:
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
     void SetTracker(Tracking* pTracker);
+
+    void SetObjectDetector(ObjectDetector* pObjectDetector);
 
     // Main function
     void Run();
@@ -67,7 +70,7 @@ public:
     void RequestFinish();
     bool isFinished();
 
-    int KeyframesInQueue(){
+    inline size_t KeyframesInQueue(){
         std::unique_lock<std::mutex> lock(mMutexNewKFs);
         return mlNewKeyFrames.size();
     }
@@ -103,6 +106,7 @@ protected:
 
     LoopClosing* mpLoopCloser;
     Tracking* mpTracker;
+    ObjectDetector* mpObjectDetector;
 
     std::list<KeyFrame*> mlNewKeyFrames;
 

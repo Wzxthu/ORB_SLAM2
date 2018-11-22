@@ -21,6 +21,7 @@ Vocabulary/ORBvoc.txt
 build/
 *~
 lib/
+model/
 
 # CLion files
 .idea/

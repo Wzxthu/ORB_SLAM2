@@ -26,6 +26,8 @@
 #include <mutex>
 #include <chrono>
 #include <algorithm>
+#include <include/LocalMapping.h>
+
 
 namespace ORB_SLAM2
 {
@@ -45,6 +47,10 @@ void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
 void LocalMapping::SetTracker(Tracking *pTracker)
 {
     mpTracker=pTracker;
+}
+
+void LocalMapping::SetObjectDetector(ObjectDetector *pObjectDetector) {
+    mpObjectDetector = pObjectDetector;
 }
 
 void LocalMapping::Run()

@@ -7,3 +7,6 @@
 [submodule "Thirdparty/DLib"]
 	path = Thirdparty/DLib
 	url = https://github.com/dorian3d/DLib.git
+[submodule "Thirdparty/darknet"]
+	path = Thirdparty/darknet
+	url = https://github.com/kyu-sz/darknet.git
