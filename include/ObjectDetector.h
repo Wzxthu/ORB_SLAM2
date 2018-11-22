@@ -11,7 +11,7 @@ struct Object {
     cv::Rect bbox;
     int classes;
     float objectness;
-    int sort_class;
+    int classIdx;
 };
 
 /// Based on YOLOv3 from DarkNet.

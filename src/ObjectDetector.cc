@@ -38,6 +38,14 @@ void ObjectDetector::Detect(const cv::Mat &im, std::vector<Object> &objects) {
     objects.clear();
     objects.reserve(static_cast<unsigned long>(nboxes));
     for (int i = 0; i < nboxes; ++i) {
+        int most_likely_class = -1;
+        float most_likely_prob = 0;
+        for (int k = 0; k < dets[i].classes; ++k) {
+            if (dets[i].prob[k] > most_likely_prob) {
+                most_likely_prob = dets[i].prob[k];
+                most_likely_class = k;
+            }
+        }
         objects.emplace_back((Object) {
                 .bbox = cv::Rect(static_cast<int>(dets[i].bbox.x * im.cols),
                                  static_cast<int>(dets[i].bbox.y * im.rows),
@@ -45,7 +53,7 @@ void ObjectDetector::Detect(const cv::Mat &im, std::vector<Object> &objects) {
                                  static_cast<int>(dets[i].bbox.h * im.rows)),
                 .classes = dets[i].classes,
                 .objectness = dets[i].objectness,
-                .sort_class = dets[i].sort_class,
+                .classIdx = most_likely_class,
         });
     }
 

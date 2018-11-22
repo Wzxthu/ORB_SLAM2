@@ -17,6 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef LOCALMAPPING_H
 #define LOCALMAPPING_H
@@ -41,7 +42,7 @@ class Map;
 class LocalMapping
 {
 public:
-    LocalMapping(Map* pMap, const float bMonocular);
+    LocalMapping(Map* pMap, bool bMonocular);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -80,6 +81,7 @@ protected:
     bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
+    void FindLandmarks();
 
     void MapPointCulling();
     void SearchInNeighbors();

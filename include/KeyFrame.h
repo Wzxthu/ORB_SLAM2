@@ -17,6 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
@@ -43,7 +44,14 @@ class KeyFrameDatabase;
 class KeyFrame
 {
 public:
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+    struct Landmark {
+        // Pose of the landmark.
+        // Transformation from the landmark coordinate system to the world coordinate system.
+        cv::Mat Tlw;
+        int classIdx;
+    };
+
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB, const cv::Mat &imColor);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -188,6 +196,11 @@ public:
     const int mnMaxY;
     const cv::Mat mK;
 
+    // Color image for performing detection.
+    cv::Mat mImColor;
+
+    // Landmarks.
+    std::vector<Landmark> landmarks;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
@@ -222,7 +235,7 @@ protected:
     // Bad flags
     bool mbNotErase;
     bool mbToBeErased;
-    bool mbBad;    
+    bool mbBad;
 
     float mHalfBaseline; // Only for visualization
 
