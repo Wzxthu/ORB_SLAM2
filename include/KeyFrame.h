@@ -17,6 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef KEYFRAME_H
 #define KEYFRAME_H
@@ -28,6 +29,7 @@
 #include "ORBextractor.h"
 #include "Frame.h"
 #include "KeyFrameDatabase.h"
+#include "Landmark.h"
 
 #include <mutex>
 
@@ -43,7 +45,8 @@ class KeyFrameDatabase;
 class KeyFrame
 {
 public:
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB);
+
+    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB, const cv::Mat &imColor, const cv::Mat &imGray);
 
     // Pose functions
     void SetPose(const cv::Mat &Tcw);
@@ -106,7 +109,7 @@ public:
     bool isBad();
 
     // Compute Scene Depth (q=2 median). Used in monocular.
-    float ComputeSceneMedianDepth(const int q);
+    float ComputeSceneMedianDepth(int q);
 
     static bool weightComp( int a, int b){
         return a>b;
@@ -188,6 +191,13 @@ public:
     const int mnMaxY;
     const cv::Mat mK;
 
+    // Color image for performing object detection.
+    cv::Mat mImColor;
+    // Gray image for performing line segment detection.
+    cv::Mat mImGray;
+
+    // Landmarks.
+    std::vector<std::shared_ptr<Landmark>> pLandmarks;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
@@ -197,7 +207,7 @@ protected:
     cv::Mat Twc;
     cv::Mat Ow;
 
-    cv::Mat Cw; // Stereo middel point. Only for visualization
+    cv::Mat Cw; // Stereo middle point. Only for visualization
 
     // MapPoints associated to keypoints
     std::vector<MapPoint*> mvpMapPoints;
@@ -222,7 +232,7 @@ protected:
     // Bad flags
     bool mbNotErase;
     bool mbToBeErased;
-    bool mbBad;    
+    bool mbBad;
 
     float mHalfBaseline; // Only for visualization
 

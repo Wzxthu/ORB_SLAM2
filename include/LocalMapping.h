@@ -17,6 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef LOCALMAPPING_H
 #define LOCALMAPPING_H
@@ -26,6 +27,7 @@
 #include "LoopClosing.h"
 #include "Tracking.h"
 #include "KeyFrameDatabase.h"
+#include "ObjectDetector.h"
 
 #include <mutex>
 
@@ -40,7 +42,7 @@ class Map;
 class LocalMapping
 {
 public:
-    LocalMapping(Map* pMap, const float bMonocular);
+    LocalMapping(Map* pMap, bool bMonocular);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -67,7 +69,7 @@ public:
     void RequestFinish();
     bool isFinished();
 
-    int KeyframesInQueue(){
+    inline size_t KeyframesInQueue(){
         std::unique_lock<std::mutex> lock(mMutexNewKFs);
         return mlNewKeyFrames.size();
     }
@@ -77,6 +79,7 @@ protected:
     bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
+    void FindLandmarks();
 
     void MapPointCulling();
     void SearchInNeighbors();
@@ -103,6 +106,8 @@ protected:
 
     LoopClosing* mpLoopCloser;
     Tracking* mpTracker;
+    ObjectDetector* mpObjectDetector;
+    cv::Ptr<cv::LineSegmentDetector> mpLineSegDetector;
 
     std::list<KeyFrame*> mlNewKeyFrames;
 
