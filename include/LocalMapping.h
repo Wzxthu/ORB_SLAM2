@@ -48,10 +48,6 @@ public:
 
     void SetTracker(Tracking* pTracker);
 
-    void SetObjectDetector(ObjectDetector* pObjectDetector);
-
-    void SetLineSegDetector(cv::Ptr<cv::LineSegmentDetector> pLineSegDetector);
-
     // Main function
     void Run();
 

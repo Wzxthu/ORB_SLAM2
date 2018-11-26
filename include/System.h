@@ -35,7 +35,6 @@
 #include "KeyFrameDatabase.h"
 #include "ORBVocabulary.h"
 #include "Viewer.h"
-#include "ObjectDetector.h"
 
 namespace ORB_SLAM2
 {
@@ -160,9 +159,6 @@ private:
 
     FrameDrawer* mpFrameDrawer;
     MapDrawer* mpMapDrawer;
-
-    ObjectDetector* mpObjectDetector;
-    cv::Ptr<cv::LineSegmentDetector> mpLineSegDetector;
 
     // System threads: Local Mapping, Loop Closing, Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.

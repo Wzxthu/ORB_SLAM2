@@ -29,7 +29,7 @@
 #include <cassert>
 #include <cmath>
 #include <utility>
-
+#include <opencv2/core/ocl.hpp>
 
 namespace ORB_SLAM2
 {
@@ -73,18 +73,12 @@ void LocalMapping::SetTracker(Tracking *pTracker)
     mpTracker=pTracker;
 }
 
-void LocalMapping::SetObjectDetector(ObjectDetector *pObjectDetector)
-{
-    mpObjectDetector = pObjectDetector;
-}
-
-void LocalMapping::SetLineSegDetector(cv::Ptr<cv::LineSegmentDetector> pLineSegDetector)
-{
-    mpLineSegDetector = std::move(pLineSegDetector);
-}
-
 void LocalMapping::Run()
 {
+    cv::ocl::setUseOpenCL(true);
+
+    mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
+    mpLineSegDetector = cv::createLineSegmentDetector();
 
     mbFinished = false;
 
@@ -156,6 +150,8 @@ void LocalMapping::Run()
     }
 
     SetFinish();
+
+    delete mpObjectDetector;
 }
 
 void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
@@ -823,7 +819,7 @@ void LocalMapping::FindLandmarks() {
         // TODO: Remove this once the assertion is passed.
         float roll, pitch, yaw;
         RollPitchYawFromRotation(RotationFromRollPitchYaw(c_roll, c_pitch, c_yaw), roll, pitch, yaw);
-        assert(roll == c_roll && pitch == c_pitch && yaw == c_yaw);
+        assert(fabs(roll - c_roll) < 0.0001 && fabs(pitch - c_pitch) < 0.0001 && fabs(yaw - c_yaw) < 0.0001);
         cout << roll << ' ' << pitch << ' ' << yaw << endl;
         cout << "Implementation of conversion functions between rotation matrix and Euler angles is correct!" << endl;
     }

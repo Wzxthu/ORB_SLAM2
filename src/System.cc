@@ -113,17 +113,12 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
         mpTracker->SetViewer(mpViewer);
     }
 
-    mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
-    mpLineSegDetector = cv::createLineSegmentDetector();
-
     //Set pointers between threads
     mpTracker->SetLocalMapper(mpLocalMapper);
     mpTracker->SetLoopClosing(mpLoopCloser);
 
     mpLocalMapper->SetTracker(mpTracker);
     mpLocalMapper->SetLoopCloser(mpLoopCloser);
-    mpLocalMapper->SetObjectDetector(mpObjectDetector);
-    mpLocalMapper->SetLineSegDetector(mpLineSegDetector);
 
     mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);
@@ -147,7 +142,6 @@ System::~System()
     delete mpLoopCloser;
     delete mptLoopClosing;
     delete mpViewer;
-    delete mpObjectDetector;
 }
 
 cv::Mat System::TrackStereo(const cv::Mat &imLeft, const cv::Mat &imRight, const double &timestamp)
@@ -528,7 +522,8 @@ vector<cv::KeyPoint> System::GetTrackedKeyPointsUn()
 }
 
 void System::ViewerLoop() {
-    mpViewer->Run();
+    if (mpViewer)
+        mpViewer->Run();
 }
 
 } //namespace ORB_SLAM

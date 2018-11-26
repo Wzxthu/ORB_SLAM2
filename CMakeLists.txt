@@ -35,7 +35,7 @@ endif()
 
 LIST(APPEND CMAKE_MODULE_PATH ${PROJECT_SOURCE_DIR}/cmake_modules)
 
-find_package(OpenCV 3.0)
+find_package(OpenCV 3.0 HINTS /usr/local/)
 if(NOT OpenCV_FOUND)
    find_package(OpenCV 2.4.3 QUIET)
    if(NOT OpenCV_FOUND)
@@ -45,6 +45,7 @@ endif()
 
 find_package(Eigen3 3.1.0 REQUIRED)
 find_package(Pangolin REQUIRED)
+find_package(OpenCL REQUIRED)
 
 add_subdirectory(Thirdparty/g2o)
 add_subdirectory(Thirdparty/DBoW2)
@@ -62,6 +63,7 @@ ${PROJECT_BINARY_DIR}/Thirdparty/g2o
 ${OpenCV_INCLUDE_DIRS}
 ${EIGEN3_INCLUDE_DIR}
 ${Pangolin_INCLUDE_DIRS}
+${OpenCL_INCLUDE_DIR}
 )
 
 set(CMAKE_LIBRARY_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/lib)
@@ -95,6 +97,7 @@ target_link_libraries(${PROJECT_NAME}
 ${OpenCV_LIBS}
 ${EIGEN3_LIBS}
 ${Pangolin_LIBRARIES}
+${OpenCL_LIBRARY}
 DBoW2
 DLib
 types_sim3

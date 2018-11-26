@@ -23,8 +23,7 @@ public:
             const char *cfgfile,
             const char *weightfile,
             float nmsThresh=.45,
-            float thresh=.5,
-            float hierThresh=.5);
+            float thresh=.5);
 
     void Detect(const cv::Mat &im, std::vector<Object> &objects);
 
@@ -34,10 +33,9 @@ private:
 
 private:
     cv::dnn::Net mNet;
-    cv::Mat blob;
+    cv::Mat mBlob;
     float mNmsThresh;
     float mConfThresh;
-    float mHierThresh;
 
     const int mInputWidth = 416;        // Width of network's input image
     const int mInputHeight = 416;       // Height of network's input image

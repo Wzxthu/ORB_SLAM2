@@ -2,6 +2,9 @@
 #include <include/ObjectDetector.h>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/core/ocl.hpp>
+
+#include <OpenCL/opencl.h>
 
 using namespace cv;
 using namespace cv::dnn;
@@ -13,12 +16,43 @@ ObjectDetector::ObjectDetector(
         const char* cfgfile,
         const char* weightfile,
         float nmsThresh,
-        float confThresh,
-        float hierThresh)
+        float confThresh)
         :
         mNet(readNetFromDarknet(cfgfile, weightfile)),
-        mNmsThresh(nmsThresh), mConfThresh(confThresh), mHierThresh(hierThresh)
+        mNmsThresh(nmsThresh), mConfThresh(confThresh)
 {
+    ocl::Context context = ocl::Context::getDefault(true);
+
+    std::vector<ocl::PlatformInfo> platforms;
+    ocl::getPlatfomsInfo(platforms);
+    for (auto& platform : platforms) {
+        //Platform Name
+        cout << "Platform Name: " << platform.name().c_str() << "\n" << endl;
+
+        //Access Device within Platform
+        ocl::Device current_device;
+        for (int j = 0; j < platform.deviceNumber(); j++)
+        {
+            //Access Device
+            platform.getDevice(current_device, j);
+            int deviceType = current_device.type();
+            cout << "Device name:  " << current_device.name() << endl;
+            if (deviceType == 2)
+                cout << context.ndevices() << " CPU devices are detected." << std::endl;
+            if (deviceType == 4)
+                cout << context.ndevices() << " GPU devices are detected." << std::endl;
+            cout << "===============================================" << endl << endl;
+        }
+    }
+
+    ocl::Device device;
+    std::string deviceName;
+    for (int i = 0; i < context.ndevices(); i++) {
+        device = context.device(i);
+        deviceName = device.name();
+        cout << "Using device: " << deviceName << endl;
+    }
+
     mNet.setPreferableBackend(DNN_BACKEND_OPENCV);
     mNet.setPreferableTarget(DNN_TARGET_OPENCL);
 
@@ -36,11 +70,11 @@ ObjectDetector::ObjectDetector(
 
 void ObjectDetector::Detect(const cv::Mat& im, std::vector<Object>& objects)
 {
-    // Create a 4D blob from a frame.
-    blobFromImage(im, blob, 1/255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
+    // Create a 4D blob from the frame.
+    blobFromImage(im, mBlob, 1/255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
 
     //Sets the input to the network
-    mNet.setInput(blob);
+    mNet.setInput(mBlob);
 
     // Runs the forward pass to get output of the output layers
     vector<Mat> outs;
@@ -67,7 +101,7 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::ve
             Point classIdPoint;
             double confidence;
             // Get the value and location of the maximum score
-            minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
+            minMaxLoc(scores, nullptr, &confidence, nullptr, &classIdPoint);
             if (confidence>mConfThresh) {
                 int centerX = (int) (data[0]*im.cols);
                 int centerY = (int) (data[1]*im.rows);
