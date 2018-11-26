@@ -13,12 +13,12 @@ using namespace std;
 namespace ORB_SLAM2 {
 
 ObjectDetector::ObjectDetector(
-        const char* cfgfile,
-        const char* weightfile,
+        const char* cfgFile,
+        const char* weightFile,
         float nmsThresh,
         float confThresh)
         :
-        mNet(readNetFromDarknet(cfgfile, weightfile)),
+        mNet(readNetFromDarknet(cfgFile, weightFile)),
         mNmsThresh(nmsThresh), mConfThresh(confThresh)
 {
     ocl::Context context = ocl::Context::getDefault(true);
@@ -30,13 +30,13 @@ ObjectDetector::ObjectDetector(
         cout << "Platform Name: " << platform.name().c_str() << "\n" << endl;
 
         //Access Device within Platform
-        ocl::Device current_device;
+        ocl::Device currentDevice;
         for (int j = 0; j < platform.deviceNumber(); j++)
         {
             //Access Device
-            platform.getDevice(current_device, j);
-            int deviceType = current_device.type();
-            cout << "Device name:  " << current_device.name() << endl;
+            platform.getDevice(currentDevice, j);
+            int deviceType = currentDevice.type();
+            cout << "Device name:  " << currentDevice.name() << endl;
             if (deviceType == 2)
                 cout << context.ndevices() << " CPU devices are detected." << std::endl;
             if (deviceType == 4)

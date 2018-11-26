@@ -328,8 +328,8 @@ void LocalMapping::CreateNewMapPoints()
         const int nmatches = vMatchedIndices.size();
         for(int ikp=0; ikp<nmatches; ikp++)
         {
-            const int &idx1 = vMatchedIndices[ikp].first;
-            const int &idx2 = vMatchedIndices[ikp].second;
+            const auto &idx1 = vMatchedIndices[ikp].first;
+            const auto &idx2 = vMatchedIndices[ikp].second;
 
             const cv::KeyPoint &kp1 = mpCurrentKeyFrame->mvKeysUn[idx1];
             const float kp1_ur=mpCurrentKeyFrame->mvuRight[idx1];
@@ -561,12 +561,17 @@ void LocalMapping::SearchInNeighbors()
     // Update connections in covisibility graph
     mpCurrentKeyFrame->UpdateConnections();
 
-    // TODO: Project landmarks in previous keyframes to the current keyframe.
+    // Project landmarks in previous keyframes to the current keyframe.
+    auto kfPose = mpCurrentKeyFrame->GetPose();
+    auto Rcw_z = kfPose.row(2).colRange(0, 3);
+    auto tcw_z = kfPose.at<float>(3, 2);
     for (auto pKFi : vpTargetKFs) {
         for (const auto& pLandmark : pKFi->pLandmarks) {
             // See if this landmark is visible in the current keyframe.
-            auto Lc = pLandmark->GetLandmarkCenter() * mpCurrentKeyFrame->GetPoseInverse();
-            
+            auto Lc_z = Rcw_z.dot(pLandmark->GetLandmarkCenter())+tcw_z;
+            if (Lc_z > 0) {
+                mpCurrentKeyFrame->pLandmarks.emplace_back(pLandmark);
+            }
         }
     }
 }

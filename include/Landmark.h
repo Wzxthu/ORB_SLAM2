@@ -11,6 +11,8 @@ public:
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetLandmarkCenter();
+    cv::Mat GetRotation();
+    cv::Mat GetTranslation();
 public:
     int classIdx;
     int landmarkID;

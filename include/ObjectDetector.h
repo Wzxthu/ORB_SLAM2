@@ -20,8 +20,8 @@ struct Object {
 class ObjectDetector {
 public:
     ObjectDetector(
-            const char *cfgfile,
-            const char *weightfile,
+            const char *cfgFile,
+            const char *weightFile,
             float nmsThresh=.45,
             float thresh=.5);
 
