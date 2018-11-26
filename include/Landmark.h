@@ -7,12 +7,13 @@ namespace ORB_SLAM2 {
 
 class Landmark {
 public:
-    void SetPose(const cv::Mat& Tcw);
+    void SetPose(const cv::Mat& Tlw_);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetLandmarkCenter();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
+    cv::Point GetProjectedCenter(const cv::Mat& Tcw);
 public:
     int classIdx;
     int landmarkID;

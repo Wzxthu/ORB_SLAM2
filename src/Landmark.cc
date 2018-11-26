@@ -19,6 +19,14 @@ void Landmark::SetPose(const cv::Mat& Tlw_)
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
+cv::Point Landmark::GetProjectedCenter(const cv::Mat& Tcw)
+{
+    cv::Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
+    return cv::Point(
+            static_cast<int>(homo.at<float>(0) / homo.at<float>(2)),
+            static_cast<int>(homo.at<float>(1) / homo.at<float>(2)));
+}
+
 cv::Mat Landmark::GetPose()
 {
     unique_lock<mutex> lock(mMutexPose);

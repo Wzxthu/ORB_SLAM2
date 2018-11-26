@@ -566,11 +566,11 @@ void LocalMapping::SearchInNeighbors()
     auto Rcw_z = kfPose.row(2).colRange(0, 3);
     auto tcw_z = kfPose.at<float>(3, 2);
     for (auto pKFi : vpTargetKFs) {
-        for (const auto& pLandmark : pKFi->pLandmarks) {
+        for (const auto& pLandmark : pKFi->mpLandmarks) {
             // See if this landmark is visible in the current keyframe.
             auto Lc_z = Rcw_z.dot(pLandmark->GetLandmarkCenter())+tcw_z;
             if (Lc_z > 0) {
-                mpCurrentKeyFrame->pLandmarks.emplace_back(pLandmark);
+                mpCurrentKeyFrame->mpLandmarks.emplace_back(pLandmark);
             }
         }
     }
@@ -829,9 +829,25 @@ void LocalMapping::FindLandmarks() {
         cout << "Implementation of conversion functions between rotation matrix and Euler angles is correct!" << endl;
     }
 
-    // TODO: Remove the bounding boxes corresponding to the landmarks projected from the previous frames.
+    // Compute the projection of the landmark centers for removing redundant objects.
+    vector<Point> projCenters;
+    projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
+    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+        projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
+    }
 
     for (auto& object : objects2D) {
+        // Remove objects already seen in previous keyframes.
+        bool seen = false;
+        for (const auto& center: projCenters) {
+            if (center.inside(object.bbox)) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+
         Landmark landmark;
         landmark.classIdx = object.classIdx;
 
