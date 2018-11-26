@@ -2,6 +2,7 @@
 #define OBJECTDETECTOR_H
 
 #include <vector>
+#include <string>
 
 #include <opencv2/opencv.hpp>
 
@@ -9,9 +10,10 @@ namespace ORB_SLAM2 {
 
 struct Object {
     cv::Rect bbox;
-    int classes;
-    float objectness;
+    float conf;
     int classIdx;
+
+    Object(const cv::Rect& bbox, float conf, int classIdx): bbox(bbox), conf(conf), classIdx(classIdx) {}
 };
 
 /// Based on YOLOv3 from DarkNet.
@@ -20,17 +22,27 @@ public:
     ObjectDetector(
             const char *cfgfile,
             const char *weightfile,
-            float nms=.45,
+            float nmsThresh=.45,
             float thresh=.5,
             float hierThresh=.5);
 
-    void Detect(const cv::Mat &img, std::vector<Object> &objects);
+    void Detect(const cv::Mat &im, std::vector<Object> &objects);
 
 private:
-    void *mpNet;
-    float mNms;
-    float mThresh;
+    // Remove the bounding boxes with low confidence using non-maxima suppression
+    void Postprocess(const cv::Mat& im, const std::vector<cv::Mat>& outs, std::vector<Object>& objects);
+
+private:
+    cv::dnn::Net mNet;
+    cv::Mat blob;
+    float mNmsThresh;
+    float mConfThresh;
     float mHierThresh;
+
+    const int mInputWidth = 416;        // Width of network's input image
+    const int mInputHeight = 416;       // Height of network's input image
+
+    std::vector<cv::String> mOutputNames;
 };
 
 }

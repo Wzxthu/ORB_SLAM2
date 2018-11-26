@@ -810,7 +810,7 @@ void LocalMapping::FindLandmarks() {
 
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
-    std::cout << "It took me " << time_span.count() << " seconds." << endl;
+    std::cout << "YOLOv3 took " << time_span.count() << " seconds." << endl;
 
     Mat lines;
     mpLineSegDetector->detect(mpCurrentKeyFrame->mImGray, lines);

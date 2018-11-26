@@ -1,69 +1,97 @@
 
 #include <include/ObjectDetector.h>
 
-#include "ObjectDetector.h"
-#include "darknet.h"
+#include <opencv2/opencv.hpp>
 
-#define NETWORK(p) ((network *)p)
+using namespace cv;
+using namespace cv::dnn;
+using namespace std;
 
 namespace ORB_SLAM2 {
 
 ObjectDetector::ObjectDetector(
-        const char *cfgfile,
-        const char *weightfile,
-        float nms,
-        float thresh,
-        float hierThresh) : mNms(nms), mThresh(thresh), mHierThresh(hierThresh) {
-    mpNet = load_network(cfgfile, weightfile, 0);
-    set_batch_network(NETWORK(mpNet), 1);
+        const char* cfgfile,
+        const char* weightfile,
+        float nmsThresh,
+        float confThresh,
+        float hierThresh)
+        :
+        mNet(readNetFromDarknet(cfgfile, weightfile)),
+        mNmsThresh(nmsThresh), mConfThresh(confThresh), mHierThresh(hierThresh)
+{
+    mNet.setPreferableBackend(DNN_BACKEND_OPENCV);
+    mNet.setPreferableTarget(DNN_TARGET_OPENCL);
+
+    //Get the indices of the output layers, i.e. the layers with unconnected outputs
+    vector<int> outLayers = mNet.getUnconnectedOutLayers();
+
+    //get the names of all the layers in the network
+    vector<String> layersNames = mNet.getLayerNames();
+
+    // Get the names of the output layers in names
+    mOutputNames.resize(outLayers.size());
+    for (size_t i = 0; i<outLayers.size(); ++i)
+        mOutputNames[i] = layersNames[outLayers[i]-1];
 }
 
-void ObjectDetector::Detect(const cv::Mat &im, std::vector<Object> &objects) {
-    clock_t time;
-    network *net = NETWORK(mpNet);
+void ObjectDetector::Detect(const cv::Mat& im, std::vector<Object>& objects)
+{
+    // Create a 4D blob from a frame.
+    blobFromImage(im, blob, 1/255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
 
-    layer l = net->layers[net->n - 1];
+    //Sets the input to the network
+    mNet.setInput(blob);
 
-    image im_dn = mat_to_image(im);
-    image sized = letterbox_image(im_dn, net->w, net->h);
-    float *X = sized.data;
-    time = clock();
-    network_predict(net, X);
+    // Runs the forward pass to get output of the output layers
+    vector<Mat> outs;
+    mNet.forward(outs, mOutputNames);
 
-    int nboxes = 0;
-    detection *dets = get_network_boxes(net, im_dn.w, im_dn.h, mThresh, mHierThresh, 0, 1, &nboxes);
-    if (mNms) do_nms_sort(dets, nboxes, l.classes, mNms);
-    printf("Predicted %d boxes in %f seconds.\n", nboxes, sec(clock() - time));
+    // Remove the bounding boxes with low confidence
+    Postprocess(im, outs, objects);
+}
 
-    objects.clear();
-    objects.reserve(static_cast<unsigned long>(nboxes));
-    for (int i = 0; i < nboxes; ++i) {
-        int most_likely_class = -1;
-        float most_likely_prob = 0;
-        for (int k = 0; k < dets[i].classes; ++k) {
-            if (dets[i].prob[k] > most_likely_prob) {
-                most_likely_prob = dets[i].prob[k];
-                most_likely_class = k;
+// Remove the bounding boxes with low confidence using non-maxima suppression
+void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::vector<Object>& objects)
+{
+    vector<int> classIds;
+    vector<float> confidences;
+    vector<Rect> boxes;
+
+    for (const auto& out : outs) {
+        // Scan through all the bounding boxes output from the network and keep only the
+        // ones with high confidence scores. Assign the box's class label as the class
+        // with the highest score for the box.
+        auto* data = (float*) out.data;
+        for (int j = 0; j<out.rows; ++j, data += out.cols) {
+            Mat scores = out.row(j).colRange(5, out.cols);
+            Point classIdPoint;
+            double confidence;
+            // Get the value and location of the maximum score
+            minMaxLoc(scores, 0, &confidence, 0, &classIdPoint);
+            if (confidence>mConfThresh) {
+                int centerX = (int) (data[0]*im.cols);
+                int centerY = (int) (data[1]*im.rows);
+                int width = (int) (data[2]*im.cols);
+                int height = (int) (data[3]*im.rows);
+                int left = centerX-width/2;
+                int top = centerY-height/2;
+
+                classIds.push_back(classIdPoint.x);
+                confidences.push_back((float) confidence);
+                boxes.emplace_back(left, top, width, height);
             }
         }
-        objects.emplace_back((Object) {
-                .bbox = cv::Rect(static_cast<int>(dets[i].bbox.x * im.cols),
-                                 static_cast<int>(dets[i].bbox.y * im.rows),
-                                 static_cast<int>(dets[i].bbox.w * im.cols),
-                                 static_cast<int>(dets[i].bbox.h * im.rows)),
-                .classes = dets[i].classes,
-                .objectness = dets[i].objectness,
-                .classIdx = most_likely_class,
-        });
     }
 
-//    char **names = get_labels("Thirdparty/darknet/data/coco.names");
-//    draw_detections(im_dn, dets, nboxes, mThresh, names, alphabet, l.classes);
-//    show_image(im_dn, "predictions", 0);
+    // Perform non maximum suppression to eliminate redundant overlapping boxes with
+    // lower confidences
+    vector<int> indices;
+    NMSBoxes(boxes, confidences, mConfThresh, mNmsThresh, indices);
 
-    free_detections(dets, nboxes);
-    free_image(im_dn);
-    free_image(sized);
+    objects.clear();
+    objects.reserve(indices.size());
+    for (auto idx: indices)
+        objects.emplace_back(boxes[idx], classIds[idx], confidences[idx]);
 }
 
 }
