@@ -114,6 +114,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     }
 
     mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
+    mpLineSegDetector = cv::createLineSegmentDetector();
 
     //Set pointers between threads
     mpTracker->SetLocalMapper(mpLocalMapper);
@@ -122,6 +123,7 @@ System::System(const string &strVocFile, const string &strSettingsFile, const eS
     mpLocalMapper->SetTracker(mpTracker);
     mpLocalMapper->SetLoopCloser(mpLoopCloser);
     mpLocalMapper->SetObjectDetector(mpObjectDetector);
+    mpLocalMapper->SetLineSegDetector(mpLineSegDetector);
 
     mpLoopCloser->SetTracker(mpTracker);
     mpLoopCloser->SetLocalMapper(mpLocalMapper);

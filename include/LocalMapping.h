@@ -50,6 +50,8 @@ public:
 
     void SetObjectDetector(ObjectDetector* pObjectDetector);
 
+    void SetLineSegDetector(cv::Ptr<cv::LineSegmentDetector> pLineSegDetector);
+
     // Main function
     void Run();
 
@@ -109,6 +111,7 @@ protected:
     LoopClosing* mpLoopCloser;
     Tracking* mpTracker;
     ObjectDetector* mpObjectDetector;
+    cv::Ptr<cv::LineSegmentDetector> mpLineSegDetector;
 
     std::list<KeyFrame*> mlNewKeyFrames;
 

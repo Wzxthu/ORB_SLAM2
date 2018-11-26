@@ -85,7 +85,8 @@ src/KeyFrameDatabase.cc
 src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
-src/ObjectDetector.cc)
+src/ObjectDetector.cc
+src/Landmark.cc)
 
 link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib)
 

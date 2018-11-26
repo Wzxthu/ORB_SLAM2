@@ -26,12 +26,36 @@
 #include <mutex>
 #include <chrono>
 #include <algorithm>
-#include <include/LocalMapping.h>
+#include <cassert>
+#include <cmath>
+#include <utility>
 
 
 namespace ORB_SLAM2
 {
 using namespace std;
+
+static inline void RollPitchYawFromRotation(const cv::Mat &rot, float &roll, float &pitch, float &yaw)
+{
+    roll = atan2(rot.at<float>(3, 2), rot.at<float>(3, 3));
+    pitch = atan2(-rot.at<float>(3, 1), sqrt(powf(rot.at<float>(3, 2), 2) + powf(rot.at<float>(3, 3), 2)));
+    yaw = atan2(rot.at<float>(2, 1), rot.at<float>(1, 1));
+}
+
+static inline cv::Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
+{
+    cv::Mat rot(3, 3, CV_32F);
+    rot.at<float>(1, 1) = cos(yaw) * cos(pitch);
+    rot.at<float>(1, 2) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
+    rot.at<float>(1, 3) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
+    rot.at<float>(2, 1) = sin(yaw) * cos(pitch);
+    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
+    rot.at<float>(1, 3) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
+    rot.at<float>(3, 1) = -sin(pitch);
+    rot.at<float>(3, 2) = cos(pitch) * sin(roll);
+    rot.at<float>(3, 3) = cos(pitch) * cos(roll);
+    return rot;
+}
 
 LocalMapping::LocalMapping(Map *pMap, bool bMonocular):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
@@ -49,8 +73,14 @@ void LocalMapping::SetTracker(Tracking *pTracker)
     mpTracker=pTracker;
 }
 
-void LocalMapping::SetObjectDetector(ObjectDetector *pObjectDetector) {
+void LocalMapping::SetObjectDetector(ObjectDetector *pObjectDetector)
+{
     mpObjectDetector = pObjectDetector;
+}
+
+void LocalMapping::SetLineSegDetector(cv::Ptr<cv::LineSegmentDetector> pLineSegDetector)
+{
+    mpLineSegDetector = std::move(pLineSegDetector);
 }
 
 void LocalMapping::Run()
@@ -77,21 +107,23 @@ void LocalMapping::Run()
 
             if(!CheckNewKeyFrames())
             {
-                // From CubeSLAM, detect landmarks and put them into bundle adjustment.
-                FindLandmarks();
-
                 // Find more matches in neighbor keyframes and fuse point duplications
                 SearchInNeighbors();
+
+                // From CubeSLAM, detect landmarks and put them into bundle adjustment.
+                FindLandmarks();
             }
 
-            // We won't need its color image for landmark detection anymore.
+            // We won't need its images anymore.
             mpCurrentKeyFrame->mImColor.release();
+            mpCurrentKeyFrame->mImGray.release();
 
             mbAbortBA = false;
 
             if(!CheckNewKeyFrames() && !stopRequested())
             {
                 // Local BA
+                // TODO: Add landmarks into BA.
                 if(mpMap->KeyFramesInMap()>2)
                     Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame,&mbAbortBA, mpMap);
 
@@ -532,6 +564,15 @@ void LocalMapping::SearchInNeighbors()
 
     // Update connections in covisibility graph
     mpCurrentKeyFrame->UpdateConnections();
+
+    // TODO: Project landmarks in previous keyframes to the current keyframe.
+    for (auto pKFi : vpTargetKFs) {
+        for (const auto& pLandmark : pKFi->pLandmarks) {
+            // See if this landmark is visible in the current keyframe.
+            auto Lc = pLandmark->GetLandmarkCenter() * mpCurrentKeyFrame->GetPoseInverse();
+            
+        }
+    }
 }
 
 cv::Mat LocalMapping::ComputeF12(KeyFrame *&pKF1, KeyFrame *&pKF2)
@@ -756,14 +797,65 @@ bool LocalMapping::isFinished()
 }
 
 void LocalMapping::FindLandmarks() {
+    using namespace cv;
+
+    if (mpCurrentKeyFrame->mImColor.empty())
+        return;
+
+    using namespace std::chrono;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
+
     vector<Object> objects2D;
     mpObjectDetector->Detect(mpCurrentKeyFrame->mImColor, objects2D);
 
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
+    std::cout << "It took me " << time_span.count() << " seconds." << endl;
+
+    Mat lines;
+    mpLineSegDetector->detect(mpCurrentKeyFrame->mImGray, lines);
+
+    // Compute camera roll and pitch.
+    float c_roll, c_pitch, c_yaw;
+    RollPitchYawFromRotation(mpCurrentKeyFrame->GetPose(), c_roll, c_pitch, c_yaw);
+    {
+        // Ensure the implementation of conversion functions between rotation matrix and Euler angles is correct.
+        // TODO: Remove this once the assertion is passed.
+        float roll, pitch, yaw;
+        RollPitchYawFromRotation(RotationFromRollPitchYaw(c_roll, c_pitch, c_yaw), roll, pitch, yaw);
+        assert(roll == c_roll && pitch == c_pitch && yaw == c_yaw);
+        cout << roll << ' ' << pitch << ' ' << yaw << endl;
+        cout << "Implementation of conversion functions between rotation matrix and Euler angles is correct!" << endl;
+    }
+
+    // TODO: Remove the bounding boxes corresponding to the landmarks projected from the previous frames.
+
     for (auto& object : objects2D) {
-        KeyFrame::Landmark landmark;
+        Landmark landmark;
         landmark.classIdx = object.classIdx;
 
         // TODO: Find landmarks with respect to the detected objects.
+        // Sample corner on the top boundary.
+        for (int i = 0; i < 10; ++i) {
+            Point topCorner(object.bbox.x + object.bbox.width * i / 9, object.bbox.y + object.bbox.height);
+
+            // Sample yaw of the landmark.
+            for (int j = 0; j < 10; ++j) {
+                float l_yaw = 36 * j;
+
+                // TODO: Recover the pose of the landmark.
+
+                // TODO: Compute the vanishing points from the pose.
+
+                // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
+
+                // TODO: Score the proposal.
+
+                // TODO: Pick the proposal with the highest score.
+            }
+        }
+
+        // TODO: Store the best proposal into the keyframe.
     }
 }
 

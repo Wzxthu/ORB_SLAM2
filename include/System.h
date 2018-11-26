@@ -17,7 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
-
+#pragma once
 
 #ifndef SYSTEM_H
 #define SYSTEM_H
@@ -162,6 +162,7 @@ private:
     MapDrawer* mpMapDrawer;
 
     ObjectDetector* mpObjectDetector;
+    cv::Ptr<cv::LineSegmentDetector> mpLineSegDetector;
 
     // System threads: Local Mapping, Loop Closing, Viewer.
     // The Tracking thread "lives" in the main execution thread that creates the System object.
