@@ -81,6 +81,10 @@ protected:
     void ProcessNewKeyFrame();
     void CreateNewMapPoints();
     void FindLandmarks();
+    float Distance(const cv::Point& pt, const LineSegment& edge) const;
+    float ChamferDistance(const LineSegment& hypothesisEdge,
+                          const std::vector<LineSegment>& actualEdges,
+                          int numSamples=10) const;
 
     void MapPointCulling();
     void SearchInNeighbors();

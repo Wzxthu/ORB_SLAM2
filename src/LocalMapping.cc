@@ -30,6 +30,7 @@
 #include <cmath>
 #include <utility>
 #include <opencv2/core/ocl.hpp>
+#include <include/LocalMapping.h>
 
 namespace ORB_SLAM2
 {
@@ -887,6 +888,57 @@ void LocalMapping::FindLandmarks() {
 
         // TODO: Store the best proposal into the keyframe.
     }
+}
+
+float LocalMapping::Distance(const cv::Point& pt, const LineSegment& edge) const
+{
+    cv::Vec2i v1(edge.first.x - pt.x, edge.first.y - pt.y);
+    cv::Vec2i v2(edge.second.x - pt.x, edge.second.y - pt.y);
+    cv::Vec2i v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    auto l1sq = v1[0] * v1[0] + v1[1] * v1[1];
+    auto l2sq = v2[0] * v2[0] + v2[1] * v2[1];
+    auto l3sq = v3[0] * v3[0] + v3[1] * v3[1];
+    if (l1sq + l3sq < l2sq)
+        return sqrtf(l2sq);
+    else if (l2sq + l3sq < l1sq)
+        return sqrtf(l1sq);
+    else {
+        // The pedal falls on the edge.
+        float l1 = sqrtf(l1sq);
+        float l2 = sqrtf(l2sq);
+        float l3 = sqrtf(l3sq);
+        float l1l2 = l1 * l2;
+        float cosine = (l1sq + l2sq - l3sq) / (2 * l1l2);
+        float sine = sqrtf(1 - cosine * cosine);
+        float h = l1l2 * sine / l3;
+        return h;
+    }
+}
+
+float LocalMapping::ChamferDistance(const LineSegment& hypothesis,
+                                    const vector<LineSegment>& actualEdges,
+                                    int numSamples) const
+{
+    int dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
+    int dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
+    int x = hypothesis.first.x;
+    int y = hypothesis.first.y;
+    float chamferDist = 0;
+    for (int i = 0; i < numSamples; ++i) {
+        cv::Point pt(x, y);
+        float smallest = -1;
+        for (const auto& edge : actualEdges) {
+            float dist = Distance(pt, edge);
+            if (smallest == -1 || dist < smallest) {
+                smallest = dist;
+            }
+        }
+        chamferDist += smallest;
+
+        x += dx;
+        y += dy;
+    }
+    return 0;
 }
 
 } //namespace ORB_SLAM
