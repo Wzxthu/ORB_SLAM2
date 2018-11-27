@@ -78,7 +78,7 @@ void LocalMapping::Run()
     cv::ocl::setUseOpenCL(true);
 
     mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
-    mpLineSegDetector = cv::createLineSegmentDetector();
+    mpLineSegDetector = new LineSegmentDetector();
 
     mbFinished = false;
 
@@ -152,6 +152,7 @@ void LocalMapping::Run()
     SetFinish();
 
     delete mpObjectDetector;
+    delete mpLineSegDetector;
 }
 
 void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
@@ -799,6 +800,7 @@ bool LocalMapping::isFinished()
 
 void LocalMapping::FindLandmarks() {
     using namespace cv;
+    typedef pair<Point, Point> LineSeg;
 
     if (mpCurrentKeyFrame->mImColor.empty())
         return;
@@ -813,8 +815,7 @@ void LocalMapping::FindLandmarks() {
     duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
     std::cout << "YOLOv3 took " << time_span.count() << " seconds." << endl;
 
-    Mat lines;
-    mpLineSegDetector->detect(mpCurrentKeyFrame->mImGray, lines);
+    auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
     // Compute camera roll and pitch.
     float c_roll, c_pitch, c_yaw;
@@ -848,6 +849,15 @@ void LocalMapping::FindLandmarks() {
         if (seen)
             continue;
 
+        // Choose the line segments lying in the bounding box for scoring.
+        vector<LineSeg> includedSegs;
+        includedSegs.reserve(lineSegs.size());
+        for (auto lineSeg : lineSegs) {
+            if (lineSeg.first.inside(object.bbox) && lineSeg.second.inside(object.bbox)) {
+                includedSegs.emplace_back(lineSeg);
+            }
+        }
+
         Landmark landmark;
         landmark.classIdx = object.classIdx;
 
@@ -860,7 +870,8 @@ void LocalMapping::FindLandmarks() {
             for (int j = 0; j < 10; ++j) {
                 float l_yaw = 36 * j;
 
-                // TODO: Recover the pose of the landmark.
+                // Recover rotation of the landmark.
+                Mat Rlw = RotationFromRollPitchYaw(c_roll, c_pitch, l_yaw);
 
                 // TODO: Compute the vanishing points from the pose.
 
@@ -871,6 +882,8 @@ void LocalMapping::FindLandmarks() {
                 // TODO: Pick the proposal with the highest score.
             }
         }
+
+        // TODO: Reason the depth of the landmark from the best proposal.
 
         // TODO: Store the best proposal into the keyframe.
     }
