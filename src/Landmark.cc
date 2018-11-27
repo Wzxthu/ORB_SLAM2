@@ -9,14 +9,22 @@ void Landmark::SetPose(const cv::Mat& Tlw_)
 {
     unique_lock<mutex> lock(mMutexPose);
     Tlw_.copyTo(Tlw);
-    cv::Mat Rcw = Tlw.rowRange(0, 3).colRange(0, 3);
-    cv::Mat tcw = Tlw.rowRange(0, 3).col(3);
-    cv::Mat Rwc = Rcw.t();
-    Lw = -Rwc*tcw;
+    cv::Mat Rlw = Tlw.rowRange(0, 3).colRange(0, 3);
+    cv::Mat tlw = Tlw.rowRange(0, 3).col(3);
+    cv::Mat Rwl = Rlw.t();
+    Lw = -Rwl*tlw;
 
     Twl = cv::Mat::eye(4, 4, Tlw.type());
-    Rwc.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
+    Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
+}
+
+cv::Point Landmark::GetProjectedCenter(const cv::Mat& Tcw)
+{
+    cv::Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
+    return cv::Point(
+            static_cast<int>(homo.at<float>(0) / homo.at<float>(2)),
+            static_cast<int>(homo.at<float>(1) / homo.at<float>(2)));
 }
 
 cv::Mat Landmark::GetPose()
@@ -35,6 +43,18 @@ cv::Mat Landmark::GetLandmarkCenter()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Lw.clone();
+}
+
+cv::Mat Landmark::GetRotation()
+{
+    unique_lock<mutex> lock(mMutexPose);
+    return Tlw.rowRange(0,3).colRange(0,3).clone();
+}
+
+cv::Mat Landmark::GetTranslation()
+{
+    unique_lock<mutex> lock(mMutexPose);
+    return Tlw.rowRange(0,3).col(3).clone();
 }
 
 }

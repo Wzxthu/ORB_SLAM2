@@ -143,15 +143,14 @@ void KeyFrame::UpdateBestCovisibles()
     vector<pair<int,KeyFrame*> > vPairs;
     vPairs.reserve(mConnectedKeyFrameWeights.size());
     for (auto &mConnectedKeyFrameWeight : mConnectedKeyFrameWeights)
-        vPairs.push_back(make_pair(mConnectedKeyFrameWeight.second, mConnectedKeyFrameWeight.first));
+        vPairs.emplace_back(mConnectedKeyFrameWeight.second, mConnectedKeyFrameWeight.first);
 
     sort(vPairs.begin(),vPairs.end());
     list<KeyFrame*> lKFs;
     list<int> lWs;
-    for(size_t i=0, iend=vPairs.size(); i<iend;i++)
-    {
-        lKFs.push_front(vPairs[i].second);
-        lWs.push_front(vPairs[i].first);
+    for (auto& vPair : vPairs) {
+        lKFs.push_front(vPair.second);
+        lWs.push_front(vPair.first);
     }
 
     mvpOrderedConnectedKeyFrames = vector<KeyFrame*>(lKFs.begin(),lKFs.end());
@@ -238,11 +237,10 @@ set<MapPoint*> KeyFrame::GetMapPoints()
 {
     unique_lock<mutex> lock(mMutexFeatures);
     set<MapPoint*> s;
-    for(size_t i=0, iend=mvpMapPoints.size(); i<iend; i++)
-    {
-        if(!mvpMapPoints[i])
+    for (auto& mvpMapPoint : mvpMapPoints) {
+        if(!mvpMapPoint)
             continue;
-        MapPoint* pMP = mvpMapPoints[i];
+        MapPoint* pMP = mvpMapPoint;
         if(!pMP->isBad())
             s.insert(pMP);
     }

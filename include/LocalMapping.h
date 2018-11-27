@@ -28,6 +28,7 @@
 #include "Tracking.h"
 #include "KeyFrameDatabase.h"
 #include "ObjectDetector.h"
+#include "LineSegmentDetector.h"
 
 #include <mutex>
 
@@ -107,7 +108,7 @@ protected:
     LoopClosing* mpLoopCloser;
     Tracking* mpTracker;
     ObjectDetector* mpObjectDetector;
-    cv::Ptr<cv::LineSegmentDetector> mpLineSegDetector;
+    LineSegmentDetector* mpLineSegDetector;
 
     std::list<KeyFrame*> mlNewKeyFrames;
 

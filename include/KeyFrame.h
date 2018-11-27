@@ -197,7 +197,7 @@ public:
     cv::Mat mImGray;
 
     // Landmarks.
-    std::vector<std::shared_ptr<Landmark>> pLandmarks;
+    std::vector<std::shared_ptr<Landmark>> mpLandmarks;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:

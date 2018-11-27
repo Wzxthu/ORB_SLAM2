@@ -30,32 +30,19 @@
 #include <cmath>
 #include <utility>
 #include <opencv2/core/ocl.hpp>
+#include <include/LocalMapping.h>
 
 namespace ORB_SLAM2
 {
 using namespace std;
+using namespace cv;
 
-static inline void RollPitchYawFromRotation(const cv::Mat &rot, float &roll, float &pitch, float &yaw)
-{
-    roll = atan2(rot.at<float>(3, 2), rot.at<float>(3, 3));
-    pitch = atan2(-rot.at<float>(3, 1), sqrt(powf(rot.at<float>(3, 2), 2) + powf(rot.at<float>(3, 3), 2)));
-    yaw = atan2(rot.at<float>(2, 1), rot.at<float>(1, 1));
-}
-
-static inline cv::Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
-{
-    cv::Mat rot(3, 3, CV_32F);
-    rot.at<float>(1, 1) = cos(yaw) * cos(pitch);
-    rot.at<float>(1, 2) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
-    rot.at<float>(1, 3) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
-    rot.at<float>(2, 1) = sin(yaw) * cos(pitch);
-    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
-    rot.at<float>(1, 3) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
-    rot.at<float>(3, 1) = -sin(pitch);
-    rot.at<float>(3, 2) = cos(pitch) * sin(roll);
-    rot.at<float>(3, 3) = cos(pitch) * cos(roll);
-    return rot;
-}
+static float Distance(const Point& pt, const LineSegment& edge);
+static float ChamferDistance(const LineSegment& hypothesisEdge,
+                             const std::vector<LineSegment>& actualEdges,
+                             int numSamples=10);
+static void RollPitchYawFromRotation(const Mat &rot, float &roll, float &pitch, float &yaw);
+static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
 
 LocalMapping::LocalMapping(Map *pMap, bool bMonocular):
     mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
@@ -75,10 +62,10 @@ void LocalMapping::SetTracker(Tracking *pTracker)
 
 void LocalMapping::Run()
 {
-    cv::ocl::setUseOpenCL(true);
+    ocl::setUseOpenCL(true);
 
     mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
-    mpLineSegDetector = cv::createLineSegmentDetector();
+    mpLineSegDetector = new LineSegmentDetector();
 
     mbFinished = false;
 
@@ -152,6 +139,7 @@ void LocalMapping::Run()
     SetFinish();
 
     delete mpObjectDetector;
+    delete mpLineSegDetector;
 }
 
 void LocalMapping::InsertKeyFrame(KeyFrame *pKF)
@@ -257,13 +245,13 @@ void LocalMapping::CreateNewMapPoints()
 
     ORBmatcher matcher(0.6,false);
 
-    cv::Mat Rcw1 = mpCurrentKeyFrame->GetRotation();
-    cv::Mat Rwc1 = Rcw1.t();
-    cv::Mat tcw1 = mpCurrentKeyFrame->GetTranslation();
-    cv::Mat Tcw1(3,4,CV_32F);
+    Mat Rcw1 = mpCurrentKeyFrame->GetRotation();
+    Mat Rwc1 = Rcw1.t();
+    Mat tcw1 = mpCurrentKeyFrame->GetTranslation();
+    Mat Tcw1(3,4,CV_32F);
     Rcw1.copyTo(Tcw1.colRange(0,3));
     tcw1.copyTo(Tcw1.col(3));
-    cv::Mat Ow1 = mpCurrentKeyFrame->GetCameraCenter();
+    Mat Ow1 = mpCurrentKeyFrame->GetCameraCenter();
 
     const float &fx1 = mpCurrentKeyFrame->fx;
     const float &fy1 = mpCurrentKeyFrame->fy;
@@ -285,9 +273,9 @@ void LocalMapping::CreateNewMapPoints()
         KeyFrame* pKF2 = vpNeighKFs[i];
 
         // Check first that baseline is not too short
-        cv::Mat Ow2 = pKF2->GetCameraCenter();
-        cv::Mat vBaseline = Ow2-Ow1;
-        const float baseline = cv::norm(vBaseline);
+        Mat Ow2 = pKF2->GetCameraCenter();
+        Mat vBaseline = Ow2-Ow1;
+        const float baseline = norm(vBaseline);
 
         if(!mbMonocular)
         {
@@ -304,16 +292,16 @@ void LocalMapping::CreateNewMapPoints()
         }
 
         // Compute Fundamental Matrix
-        cv::Mat F12 = ComputeF12(mpCurrentKeyFrame,pKF2);
+        Mat F12 = ComputeF12(mpCurrentKeyFrame,pKF2);
 
         // Search matches that fullfil epipolar constraint
         vector<pair<size_t,size_t> > vMatchedIndices;
         matcher.SearchForTriangulation(mpCurrentKeyFrame,pKF2,F12,vMatchedIndices,false);
 
-        cv::Mat Rcw2 = pKF2->GetRotation();
-        cv::Mat Rwc2 = Rcw2.t();
-        cv::Mat tcw2 = pKF2->GetTranslation();
-        cv::Mat Tcw2(3,4,CV_32F);
+        Mat Rcw2 = pKF2->GetRotation();
+        Mat Rwc2 = Rcw2.t();
+        Mat tcw2 = pKF2->GetTranslation();
+        Mat Tcw2(3,4,CV_32F);
         Rcw2.copyTo(Tcw2.colRange(0,3));
         tcw2.copyTo(Tcw2.col(3));
 
@@ -328,24 +316,24 @@ void LocalMapping::CreateNewMapPoints()
         const int nmatches = vMatchedIndices.size();
         for(int ikp=0; ikp<nmatches; ikp++)
         {
-            const int &idx1 = vMatchedIndices[ikp].first;
-            const int &idx2 = vMatchedIndices[ikp].second;
+            const auto &idx1 = vMatchedIndices[ikp].first;
+            const auto &idx2 = vMatchedIndices[ikp].second;
 
-            const cv::KeyPoint &kp1 = mpCurrentKeyFrame->mvKeysUn[idx1];
+            const KeyPoint &kp1 = mpCurrentKeyFrame->mvKeysUn[idx1];
             const float kp1_ur=mpCurrentKeyFrame->mvuRight[idx1];
             bool bStereo1 = kp1_ur>=0;
 
-            const cv::KeyPoint &kp2 = pKF2->mvKeysUn[idx2];
+            const KeyPoint &kp2 = pKF2->mvKeysUn[idx2];
             const float kp2_ur = pKF2->mvuRight[idx2];
             bool bStereo2 = kp2_ur>=0;
 
             // Check parallax between rays
-            cv::Mat xn1 = (cv::Mat_<float>(3,1) << (kp1.pt.x-cx1)*invfx1, (kp1.pt.y-cy1)*invfy1, 1.0);
-            cv::Mat xn2 = (cv::Mat_<float>(3,1) << (kp2.pt.x-cx2)*invfx2, (kp2.pt.y-cy2)*invfy2, 1.0);
+            Mat xn1 = (Mat_<float>(3,1) << (kp1.pt.x-cx1)*invfx1, (kp1.pt.y-cy1)*invfy1, 1.0);
+            Mat xn2 = (Mat_<float>(3,1) << (kp2.pt.x-cx2)*invfx2, (kp2.pt.y-cy2)*invfy2, 1.0);
 
-            cv::Mat ray1 = Rwc1*xn1;
-            cv::Mat ray2 = Rwc2*xn2;
-            const float cosParallaxRays = ray1.dot(ray2)/(cv::norm(ray1)*cv::norm(ray2));
+            Mat ray1 = Rwc1*xn1;
+            Mat ray2 = Rwc2*xn2;
+            const float cosParallaxRays = ray1.dot(ray2)/(norm(ray1)*norm(ray2));
 
             float cosParallaxStereo = cosParallaxRays+1;
             float cosParallaxStereo1 = cosParallaxStereo;
@@ -358,18 +346,18 @@ void LocalMapping::CreateNewMapPoints()
 
             cosParallaxStereo = min(cosParallaxStereo1,cosParallaxStereo2);
 
-            cv::Mat x3D;
+            Mat x3D;
             if(cosParallaxRays<cosParallaxStereo && cosParallaxRays>0 && (bStereo1 || bStereo2 || cosParallaxRays<0.9998))
             {
                 // Linear Triangulation Method
-                cv::Mat A(4,4,CV_32F);
+                Mat A(4,4,CV_32F);
                 A.row(0) = xn1.at<float>(0)*Tcw1.row(2)-Tcw1.row(0);
                 A.row(1) = xn1.at<float>(1)*Tcw1.row(2)-Tcw1.row(1);
                 A.row(2) = xn2.at<float>(0)*Tcw2.row(2)-Tcw2.row(0);
                 A.row(3) = xn2.at<float>(1)*Tcw2.row(2)-Tcw2.row(1);
 
-                cv::Mat w,u,vt;
-                cv::SVD::compute(A,w,u,vt,cv::SVD::MODIFY_A| cv::SVD::FULL_UV);
+                Mat w,u,vt;
+                SVD::compute(A,w,u,vt,SVD::MODIFY_A| SVD::FULL_UV);
 
                 x3D = vt.row(3).t();
 
@@ -391,7 +379,7 @@ void LocalMapping::CreateNewMapPoints()
             else
                 continue; //No stereo and very low parallax
 
-            cv::Mat x3Dt = x3D.t();
+            Mat x3Dt = x3D.t();
 
             //Check triangulation in front of cameras
             float z1 = Rcw1.row(2).dot(x3Dt)+tcw1.at<float>(2);
@@ -456,11 +444,11 @@ void LocalMapping::CreateNewMapPoints()
             }
 
             //Check scale consistency
-            cv::Mat normal1 = x3D-Ow1;
-            float dist1 = cv::norm(normal1);
+            Mat normal1 = x3D-Ow1;
+            float dist1 = norm(normal1);
 
-            cv::Mat normal2 = x3D-Ow2;
-            float dist2 = cv::norm(normal2);
+            Mat normal2 = x3D-Ow2;
+            float dist2 = norm(normal2);
 
             if(dist1==0 || dist2==0)
                 continue;
@@ -561,30 +549,35 @@ void LocalMapping::SearchInNeighbors()
     // Update connections in covisibility graph
     mpCurrentKeyFrame->UpdateConnections();
 
-    // TODO: Project landmarks in previous keyframes to the current keyframe.
+    // Project landmarks in previous keyframes to the current keyframe.
+    auto kfPose = mpCurrentKeyFrame->GetPose();
+    auto Rcw_z = kfPose.row(2).colRange(0, 3);
+    auto tcw_z = kfPose.at<float>(3, 2);
     for (auto pKFi : vpTargetKFs) {
-        for (const auto& pLandmark : pKFi->pLandmarks) {
+        for (const auto& pLandmark : pKFi->mpLandmarks) {
             // See if this landmark is visible in the current keyframe.
-            auto Lc = pLandmark->GetLandmarkCenter() * mpCurrentKeyFrame->GetPoseInverse();
-            
+            auto Lc_z = Rcw_z.dot(pLandmark->GetLandmarkCenter())+tcw_z;
+            if (Lc_z > 0) {
+                mpCurrentKeyFrame->mpLandmarks.emplace_back(pLandmark);
+            }
         }
     }
 }
 
-cv::Mat LocalMapping::ComputeF12(KeyFrame *&pKF1, KeyFrame *&pKF2)
+Mat LocalMapping::ComputeF12(KeyFrame *&pKF1, KeyFrame *&pKF2)
 {
-    cv::Mat R1w = pKF1->GetRotation();
-    cv::Mat t1w = pKF1->GetTranslation();
-    cv::Mat R2w = pKF2->GetRotation();
-    cv::Mat t2w = pKF2->GetTranslation();
+    Mat R1w = pKF1->GetRotation();
+    Mat t1w = pKF1->GetTranslation();
+    Mat R2w = pKF2->GetRotation();
+    Mat t2w = pKF2->GetTranslation();
 
-    cv::Mat R12 = R1w*R2w.t();
-    cv::Mat t12 = -R1w*R2w.t()*t2w+t1w;
+    Mat R12 = R1w*R2w.t();
+    Mat t12 = -R1w*R2w.t()*t2w+t1w;
 
-    cv::Mat t12x = SkewSymmetricMatrix(t12);
+    Mat t12x = SkewSymmetricMatrix(t12);
 
-    const cv::Mat &K1 = pKF1->mK;
-    const cv::Mat &K2 = pKF2->mK;
+    const Mat &K1 = pKF1->mK;
+    const Mat &K2 = pKF2->mK;
 
 
     return K1.t().inv()*t12x*R12*K2.inv();
@@ -730,9 +723,9 @@ void LocalMapping::KeyFrameCulling()
     }
 }
 
-cv::Mat LocalMapping::SkewSymmetricMatrix(const cv::Mat &v)
+Mat LocalMapping::SkewSymmetricMatrix(const Mat &v)
 {
-    return (cv::Mat_<float>(3,3) <<             0, -v.at<float>(2), v.at<float>(1),
+    return (Mat_<float>(3,3) <<             0, -v.at<float>(2), v.at<float>(1),
             v.at<float>(2),               0,-v.at<float>(0),
             -v.at<float>(1),  v.at<float>(0),              0);
 }
@@ -794,6 +787,7 @@ bool LocalMapping::isFinished()
 
 void LocalMapping::FindLandmarks() {
     using namespace cv;
+    typedef pair<Point, Point> LineSeg;
 
     if (mpCurrentKeyFrame->mImColor.empty())
         return;
@@ -808,8 +802,7 @@ void LocalMapping::FindLandmarks() {
     duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
     std::cout << "YOLOv3 took " << time_span.count() << " seconds." << endl;
 
-    Mat lines;
-    mpLineSegDetector->detect(mpCurrentKeyFrame->mImGray, lines);
+    auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
     // Compute camera roll and pitch.
     float c_roll, c_pitch, c_yaw;
@@ -824,9 +817,35 @@ void LocalMapping::FindLandmarks() {
         cout << "Implementation of conversion functions between rotation matrix and Euler angles is correct!" << endl;
     }
 
-    // TODO: Remove the bounding boxes corresponding to the landmarks projected from the previous frames.
+    // Compute the projection of the landmark centers for removing redundant objects.
+    vector<Point> projCenters;
+    projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
+    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+        projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
+    }
 
     for (auto& object : objects2D) {
+        // Remove objects already seen in previous keyframes.
+        bool seen = false;
+        for (const auto& center: projCenters) {
+            // TODO: Change to check if the previous center is near the center of the current bounding box.
+            if (center.inside(object.bbox)) {
+                seen = true;
+                break;
+            }
+        }
+        if (seen)
+            continue;
+
+        // Choose the line segments lying in the bounding box for scoring.
+        vector<LineSeg> includedSegs;
+        includedSegs.reserve(lineSegs.size());
+        for (auto lineSeg : lineSegs) {
+            if (lineSeg.first.inside(object.bbox) && lineSeg.second.inside(object.bbox)) {
+                includedSegs.emplace_back(lineSeg);
+            }
+        }
+
         Landmark landmark;
         landmark.classIdx = object.classIdx;
 
@@ -839,7 +858,9 @@ void LocalMapping::FindLandmarks() {
             for (int j = 0; j < 10; ++j) {
                 float l_yaw = 36 * j;
 
-                // TODO: Recover the pose of the landmark.
+                // Recover rotation of the landmark.
+                // TODO: Compute the pose w.r.t the ground.
+                Mat Rlw = RotationFromRollPitchYaw(c_roll, c_pitch, l_yaw);
 
                 // TODO: Compute the vanishing points from the pose.
 
@@ -851,8 +872,83 @@ void LocalMapping::FindLandmarks() {
             }
         }
 
+        // TODO: Reason the depth of the landmark from the best proposal.
+
         // TODO: Store the best proposal into the keyframe.
     }
+}
+
+static void RollPitchYawFromRotation(const Mat &rot, float &roll, float &pitch, float &yaw)
+{
+    roll = atan2(rot.at<float>(3, 2), rot.at<float>(3, 3));
+    pitch = atan2(-rot.at<float>(3, 1), sqrt(powf(rot.at<float>(3, 2), 2) + powf(rot.at<float>(3, 3), 2)));
+    yaw = atan2(rot.at<float>(2, 1), rot.at<float>(1, 1));
+}
+
+static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
+{
+    Mat rot(3, 3, CV_32F);
+    rot.at<float>(1, 1) = cos(yaw) * cos(pitch);
+    rot.at<float>(1, 2) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
+    rot.at<float>(1, 3) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
+    rot.at<float>(2, 1) = sin(yaw) * cos(pitch);
+    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
+    rot.at<float>(1, 3) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
+    rot.at<float>(3, 1) = -sin(pitch);
+    rot.at<float>(3, 2) = cos(pitch) * sin(roll);
+    rot.at<float>(3, 3) = cos(pitch) * cos(roll);
+    return rot;
+}
+
+float Distance(const Point& pt, const LineSegment& edge)
+{
+    Vec2i v1(edge.first.x - pt.x, edge.first.y - pt.y);
+    Vec2i v2(edge.second.x - pt.x, edge.second.y - pt.y);
+    Vec2i v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    auto l1sq = v1[0] * v1[0] + v1[1] * v1[1];
+    auto l2sq = v2[0] * v2[0] + v2[1] * v2[1];
+    auto l3sq = v3[0] * v3[0] + v3[1] * v3[1];
+    if (l1sq + l3sq < l2sq)
+        return sqrtf(l2sq);
+    else if (l2sq + l3sq < l1sq)
+        return sqrtf(l1sq);
+    else {
+        // The pedal falls on the edge.
+        float l1 = sqrtf(l1sq);
+        float l2 = sqrtf(l2sq);
+        float l3 = sqrtf(l3sq);
+        float l1l2 = l1 * l2;
+        float cosine = (l1sq + l2sq - l3sq) / (2 * l1l2);
+        float sine = sqrtf(1 - cosine * cosine);
+        float h = l1l2 * sine / l3;
+        return h;
+    }
+}
+
+float ChamferDistance(const LineSegment& hypothesis,
+                      const vector<LineSegment>& actualEdges,
+                      int numSamples)
+{
+    int dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
+    int dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
+    int x = hypothesis.first.x;
+    int y = hypothesis.first.y;
+    float chamferDist = 0;
+    for (int i = 0; i < numSamples; ++i) {
+        Point pt(x, y);
+        float smallest = -1;
+        for (const auto& edge : actualEdges) {
+            float dist = Distance(pt, edge);
+            if (smallest == -1 || dist < smallest) {
+                smallest = dist;
+            }
+        }
+        chamferDist += smallest;
+
+        x += dx;
+        y += dy;
+    }
+    return 0;
 }
 
 } //namespace ORB_SLAM
