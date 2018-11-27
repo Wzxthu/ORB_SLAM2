@@ -38,10 +38,11 @@ using namespace cv;
 
 static float Distance(const Point& pt, const LineSegment& edge);
 static float ChamferDistance(const LineSegment& hypothesisEdge,
-                             const std::vector<LineSegment>& actualEdges,
+                             const vector<LineSegment>& actualEdges,
                              int numSamples = 10);
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
+static float AlignmentError(const Point& pt, const LineSegment& edge);
 
 LocalMapping::LocalMapping(Map* pMap, bool bMonocular)
         :
@@ -917,6 +918,17 @@ float ChamferDistance(const LineSegment& hypothesis,
         y += dy;
     }
     return 0;
+}
+
+static float AlignmentError(const Point& pt, const LineSegment& edge)
+{
+    Vec2i v1(pt.x - edge.first.x, pt.y - edge.first.y);
+    Vec2i v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    float cosine = v1.dot(v2) / (norm(v1) * norm(v2));
+    float angle = acos(cosine);
+    if (angle > M_PI_2)
+        angle = M_PI - angle;
+    return angle;
 }
 
 } //namespace ORB_SLAM
