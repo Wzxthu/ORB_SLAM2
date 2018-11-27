@@ -768,6 +768,13 @@ void LocalMapping::FindLandmarks()
 
     auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
+    // Get Intrinsic and Extrinsic Matrix
+    const auto M = mpCurrentKeyFrame->GetPose(); // 4 x 4 projection matrix
+    const auto R = mpCurrentKeyFrame->GetRotation();
+    const auto t = mpCurrentKeyFrame->GetTranslation();
+    const auto K = mpCurrentKeyFrame->mK; // 3 x 3 intrinsic matrix
+    const auto invR = R.inv();
+
     // Compute camera roll and pitch.
     float c_roll, c_pitch, c_yaw;
     RollPitchYawFromRotation(mpCurrentKeyFrame->GetPose(), c_roll, c_pitch, c_yaw);
@@ -827,9 +834,17 @@ void LocalMapping::FindLandmarks()
                         // Recover rotation of the landmark.
                         // TODO: Compute the pose w.r.t the ground.
                         Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, l_yaw);
-
+                        Mat invRlw = Rlw.inv();
                         // TODO: Compute the vanishing points from the pose.
-
+                        cv::Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
+                        cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
+                        cv::Vec3f R3(0, 0, 1);
+                        Mat vp1 = K * invRlw * Mat(R1);
+                        vp1 = vp1 / vp1.at<float>(2, 0);
+                        Mat vp2 = K * invRlw * Mat(R2);
+                        vp2 = vp2 / vp2.at<float>(2, 0);
+                        Mat vp3 = K * invRlw * Mat(R3);
+                        vp3 = vp3 / vp3.at<float>(2, 0);
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
 
                         // TODO: Score the proposal.
@@ -848,23 +863,23 @@ void LocalMapping::FindLandmarks()
 
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw)
 {
-    roll = atan2(rot.at<float>(3, 2), rot.at<float>(3, 3));
-    pitch = atan2(-rot.at<float>(3, 1), sqrt(powf(rot.at<float>(3, 2), 2) + powf(rot.at<float>(3, 3), 2)));
-    yaw = atan2(rot.at<float>(2, 1), rot.at<float>(1, 1));
+    roll = atan2(rot.at<float>(2, 1), rot.at<float>(2, 2));
+    pitch = atan2(-rot.at<float>(2, 0), sqrt(powf(rot.at<float>(2, 1), 2) + powf(rot.at<float>(2, 2), 2)));
+    yaw = atan2(rot.at<float>(1, 0), rot.at<float>(0, 0));
 }
 
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
 {
     Mat rot(3, 3, CV_32F);
-    rot.at<float>(1, 1) = cos(yaw) * cos(pitch);
-    rot.at<float>(1, 2) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
-    rot.at<float>(1, 3) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
-    rot.at<float>(2, 1) = sin(yaw) * cos(pitch);
-    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
-    rot.at<float>(1, 3) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
-    rot.at<float>(3, 1) = -sin(pitch);
-    rot.at<float>(3, 2) = cos(pitch) * sin(roll);
-    rot.at<float>(3, 3) = cos(pitch) * cos(roll);
+    rot.at<float>(0, 0) = cos(yaw) * cos(pitch);
+    rot.at<float>(0, 1) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
+    rot.at<float>(0, 2) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
+    rot.at<float>(1, 0) = sin(yaw) * cos(pitch);
+    rot.at<float>(1, 1) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
+    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
+    rot.at<float>(2, 0) = -sin(pitch);
+    rot.at<float>(2, 1) = cos(pitch) * sin(roll);
+    rot.at<float>(2, 2) = cos(pitch) * cos(roll);
     return rot;
 }
 
