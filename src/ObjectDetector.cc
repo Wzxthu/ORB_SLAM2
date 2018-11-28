@@ -1,3 +1,21 @@
+/**
+ * This file is part of CubeSLAM.
+ *
+ * Copyright (C) 2018, Carnegie Mellon University
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
 
 #include <include/ObjectDetector.h>
 
@@ -31,8 +49,7 @@ ObjectDetector::ObjectDetector(
 
         //Access Device within Platform
         ocl::Device currentDevice;
-        for (int j = 0; j < platform.deviceNumber(); j++)
-        {
+        for (int j = 0; j < platform.deviceNumber(); j++) {
             //Access Device
             platform.getDevice(currentDevice, j);
             int deviceType = currentDevice.type();
@@ -64,14 +81,14 @@ ObjectDetector::ObjectDetector(
 
     // Get the names of the output layers in names
     mOutputNames.resize(outLayers.size());
-    for (size_t i = 0; i<outLayers.size(); ++i)
-        mOutputNames[i] = layersNames[outLayers[i]-1];
+    for (size_t i = 0; i < outLayers.size(); ++i)
+        mOutputNames[i] = layersNames[outLayers[i] - 1];
 }
 
 void ObjectDetector::Detect(const cv::Mat& im, std::vector<Object>& objects)
 {
     // Create a 4D blob from the frame.
-    blobFromImage(im, mBlob, 1/255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
+    blobFromImage(im, mBlob, 1 / 255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
 
     //Sets the input to the network
     mNet.setInput(mBlob);
@@ -96,19 +113,19 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::ve
         // ones with high confidence scores. Assign the box's class label as the class
         // with the highest score for the box.
         auto* data = (float*) out.data;
-        for (int j = 0; j<out.rows; ++j, data += out.cols) {
+        for (int j = 0; j < out.rows; ++j, data += out.cols) {
             Mat scores = out.row(j).colRange(5, out.cols);
             Point classIdPoint;
             double confidence;
             // Get the value and location of the maximum score
             minMaxLoc(scores, nullptr, &confidence, nullptr, &classIdPoint);
-            if (confidence>mConfThresh) {
-                int centerX = (int) (data[0]*im.cols);
-                int centerY = (int) (data[1]*im.rows);
-                int width = (int) (data[2]*im.cols);
-                int height = (int) (data[3]*im.rows);
-                int left = centerX-width/2;
-                int top = centerY-height/2;
+            if (confidence > mConfThresh) {
+                int centerX = (int) (data[0] * im.cols);
+                int centerY = (int) (data[1] * im.rows);
+                int width = (int) (data[2] * im.cols);
+                int height = (int) (data[3] * im.rows);
+                int left = centerX - width / 2;
+                int top = centerY - height / 2;
 
                 classIds.push_back(classIdPoint.x);
                 confidences.push_back((float) confidence);
@@ -125,7 +142,7 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::ve
     objects.clear();
     objects.reserve(indices.size());
     for (auto idx: indices)
-        objects.emplace_back(boxes[idx], classIds[idx], confidences[idx]);
+        objects.emplace_back(boxes[idx], confidences[idx], classIds[idx]);
 }
 
 }

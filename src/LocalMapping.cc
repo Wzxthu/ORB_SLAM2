@@ -38,15 +38,17 @@ using namespace cv;
 
 static float Distance(const Point& pt, const LineSegment& edge);
 static float ChamferDistance(const LineSegment& hypothesisEdge,
-                             const std::vector<LineSegment>& actualEdges,
+                             const vector<LineSegment>& actualEdges,
                              int numSamples = 10);
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
+static float AlignmentError(const Point& pt, const LineSegment& edge);
 
-LocalMapping::LocalMapping(Map* pMap, bool bMonocular)
+LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular)
         :
         mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
-        mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true)
+        mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
+        mpFrameDrawer(pFrameDrawer)
 {
 }
 
@@ -702,7 +704,7 @@ void LocalMapping::RequestReset()
         mbResetRequested = true;
     }
 
-    while (1) {
+    while (true) {
         {
             unique_lock<mutex> lock2(mMutexReset);
             if (!mbResetRequested)
@@ -821,9 +823,13 @@ void LocalMapping::FindLandmarks()
         landmark.classIdx = object.classIdx;
 
         // TODO: Find landmarks with respect to the detected objects.
+        // Represent the proposal with the coordinates in frame of the 8 corners.
+        cv::Point proposalCorners[8];
+        bool isCornerVisible[8] = {true};
         // Sample corner on the top boundary.
         for (int i = 0; i < 10; ++i) {
-            Point topCorner(object.bbox.x + object.bbox.width * i / 9, object.bbox.y + object.bbox.height);
+            proposalCorners[0] = cv::Point(object.bbox.x + object.bbox.width * i / 9,
+                                           object.bbox.y + object.bbox.height);
 
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = 0; l_yaw < 2 * M_PI; l_yaw += M_PI / 3) {
@@ -832,9 +838,9 @@ void LocalMapping::FindLandmarks()
                     // Sample the landmark pitch in 90 degrees around the camera pitch.
                     for (float l_pitch = c_pitch - M_PI_2; l_pitch < c_pitch + M_PI_2; l_pitch += M_PI / 3) {
                         // Recover rotation of the landmark.
-                        // TODO: Compute the pose w.r.t the ground.
                         Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, l_yaw);
-                        Mat invRlw = Rlw.inv();
+                        Mat invRlw = Rlw.t();
+
                         // TODO: Compute the vanishing points from the pose.
                         cv::Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
                         cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
@@ -845,9 +851,12 @@ void LocalMapping::FindLandmarks()
                         vp2 = vp2 / vp2.at<float>(2, 0);
                         Mat vp3 = K * invRlw * Mat(R3);
                         vp3 = vp3 / vp3.at<float>(2, 0);
+
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
 
                         // TODO: Score the proposal.
+                        float totalError = 0;
+                        // Distance error.
 
                         // TODO: Pick the proposal with the highest score.
                     }
@@ -859,6 +868,9 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Store the best proposal into the keyframe.
     }
+
+    // Visualize intermediate results used for finding landmarks.
+    mpFrameDrawer->UpdateKeyframe(mpCurrentKeyFrame, objects2D);
 }
 
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw)
@@ -932,6 +944,17 @@ float ChamferDistance(const LineSegment& hypothesis,
         y += dy;
     }
     return 0;
+}
+
+static float AlignmentError(const Point& pt, const LineSegment& edge)
+{
+    Vec2i v1(pt.x - edge.first.x, pt.y - edge.first.y);
+    Vec2i v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    float cosine = v1.dot(v2) / (norm(v1) * norm(v2));
+    float angle = acos(cosine);
+    if (angle > M_PI_2)
+        angle = M_PI - angle;
+    return angle;
 }
 
 } //namespace ORB_SLAM
