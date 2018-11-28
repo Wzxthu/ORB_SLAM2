@@ -823,9 +823,13 @@ void LocalMapping::FindLandmarks()
         landmark.classIdx = object.classIdx;
 
         // TODO: Find landmarks with respect to the detected objects.
+        // Represent the proposal with the coordinates in frame of the 8 corners.
+        cv::Point proposalCorners[8];
+        bool isCornerVisible[8] = {true};
         // Sample corner on the top boundary.
         for (int i = 0; i < 10; ++i) {
-            Point topCorner(object.bbox.x + object.bbox.width * i / 9, object.bbox.y + object.bbox.height);
+            proposalCorners[0] = cv::Point(object.bbox.x + object.bbox.width * i / 9,
+                                           object.bbox.y + object.bbox.height);
 
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = 0; l_yaw < 2 * M_PI; l_yaw += M_PI / 3) {
@@ -836,6 +840,7 @@ void LocalMapping::FindLandmarks()
                         // Recover rotation of the landmark.
                         Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, l_yaw);
                         Mat invRlw = Rlw.t();
+
                         // TODO: Compute the vanishing points from the pose.
                         cv::Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
                         cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
@@ -846,9 +851,12 @@ void LocalMapping::FindLandmarks()
                         vp2 = vp2 / vp2.at<float>(2, 0);
                         Mat vp3 = K * invRlw * Mat(R3);
                         vp3 = vp3 / vp3.at<float>(2, 0);
+
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
 
                         // TODO: Score the proposal.
+                        float totalError = 0;
+                        // Distance error.
 
                         // TODO: Pick the proposal with the highest score.
                     }
