@@ -17,6 +17,7 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef FRAMEDRAWER_H
 #define FRAMEDRAWER_H
@@ -24,11 +25,12 @@
 #include "Tracking.h"
 #include "MapPoint.h"
 #include "Map.h"
+#include "ObjectDetector.h"
 
-#include<opencv2/core/core.hpp>
-#include<opencv2/features2d/features2d.hpp>
+#include <opencv2/core/core.hpp>
+#include <opencv2/features2d/features2d.hpp>
 
-#include<mutex>
+#include <mutex>
 
 
 namespace ORB_SLAM2
@@ -36,19 +38,28 @@ namespace ORB_SLAM2
 
 class Tracking;
 class Viewer;
+class LocalMapping;
 
 class FrameDrawer
 {
 public:
-    FrameDrawer(Map* pMap);
+    explicit FrameDrawer(Map* pMap);
 
     // Update info from the last processed frame.
     void Update(Tracking *pTracker);
 
+    // Update info from the last processed keyframe.
+    void UpdateKeyframe(const KeyFrame* keyFrame, const std::vector<Object>& objects2D);
+
     // Draw last processed frame.
     cv::Mat DrawFrame();
 
+    // Draw last processed keyframe.
+    cv::Mat DrawKeyframe();
+
 protected:
+
+    void DrawPred(int classId, float conf, int left, int top, int right, int bottom, cv::Mat& frame);
 
     void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
 
@@ -66,6 +77,11 @@ protected:
     Map* mpMap;
 
     std::mutex mMutex;
+
+    // Info of the keyframe to be drawn.
+    cv::Mat mKeyframeIm;
+    std::vector<std::shared_ptr<Landmark>> mpLandmarks;
+    std::vector<std::string> mClasses;
 };
 
 } //namespace ORB_SLAM

@@ -29,6 +29,7 @@
 #include "KeyFrameDatabase.h"
 #include "ObjectDetector.h"
 #include "LineSegmentDetector.h"
+#include "FrameDrawer.h"
 
 #include <mutex>
 
@@ -39,11 +40,12 @@ namespace ORB_SLAM2
 class Tracking;
 class LoopClosing;
 class Map;
+class FrameDrawer;
 
 class LocalMapping
 {
 public:
-    LocalMapping(Map* pMap, bool bMonocular);
+    LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -107,6 +109,7 @@ protected:
 
     LoopClosing* mpLoopCloser;
     Tracking* mpTracker;
+    FrameDrawer* mpFrameDrawer;
     ObjectDetector* mpObjectDetector;
     LineSegmentDetector* mpLineSegDetector;
 

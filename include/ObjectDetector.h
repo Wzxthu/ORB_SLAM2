@@ -13,7 +13,7 @@ struct Object {
     float conf;
     int classIdx;
 
-    Object(const cv::Rect& bbox, float conf, int classIdx): bbox(bbox), conf(conf), classIdx(classIdx) {}
+    Object(const cv::Rect& bbox_, float conf_, int classIdx_): bbox(bbox_), conf(conf_), classIdx(classIdx_) {}
 };
 
 /// Based on YOLOv3 from DarkNet.

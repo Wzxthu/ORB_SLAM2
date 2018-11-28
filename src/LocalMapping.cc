@@ -44,10 +44,11 @@ static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, 
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
 static float AlignmentError(const Point& pt, const LineSegment& edge);
 
-LocalMapping::LocalMapping(Map* pMap, bool bMonocular)
+LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular)
         :
         mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
-        mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true)
+        mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
+        mpFrameDrawer(pFrameDrawer)
 {
 }
 
@@ -703,7 +704,7 @@ void LocalMapping::RequestReset()
         mbResetRequested = true;
     }
 
-    while (1) {
+    while (true) {
         {
             unique_lock<mutex> lock2(mMutexReset);
             if (!mbResetRequested)
@@ -860,6 +861,9 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Store the best proposal into the keyframe.
     }
+
+    // Visualize intermediate results used for finding landmarks.
+    mpFrameDrawer->UpdateKeyframe(mpCurrentKeyFrame, objects2D);
 }
 
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw)

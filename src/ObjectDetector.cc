@@ -125,7 +125,7 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::ve
     objects.clear();
     objects.reserve(indices.size());
     for (auto idx: indices)
-        objects.emplace_back(boxes[idx], classIds[idx], confidences[idx]);
+        objects.emplace_back(boxes[idx], confidences[idx], classIds[idx]);
 }
 
 }
