@@ -834,9 +834,8 @@ void LocalMapping::FindLandmarks()
                     // Sample the landmark pitch in 90 degrees around the camera pitch.
                     for (float l_pitch = c_pitch - M_PI_2; l_pitch < c_pitch + M_PI_2; l_pitch += M_PI / 3) {
                         // Recover rotation of the landmark.
-                        // TODO: Compute the pose w.r.t the ground.
                         Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, l_yaw);
-                        Mat invRlw = Rlw.inv();
+                        Mat invRlw = Rlw.t();
                         // TODO: Compute the vanishing points from the pose.
                         cv::Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
                         cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);

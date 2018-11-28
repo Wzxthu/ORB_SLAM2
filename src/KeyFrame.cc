@@ -492,17 +492,16 @@ void KeyFrame::SetBadFlag()
 
                 // Check if a parent candidate is connected to the keyframe
                 vector<KeyFrame*> vpConnected = pKF->GetVectorCovisibleKeyFrames();
-                for(size_t i=0, iend=vpConnected.size(); i<iend; i++)
-                {
+                for (auto& pConnected : vpConnected) {
                     for (auto sParentCandidate : sParentCandidates)
                     {
-                        if(vpConnected[i]->mnId == sParentCandidate->mnId)
+                        if(pConnected->mnId == sParentCandidate->mnId)
                         {
-                            int w = pKF->GetWeight(vpConnected[i]);
+                            int w = pKF->GetWeight(pConnected);
                             if(w>max)
                             {
                                 pC = pKF;
-                                pP = vpConnected[i];
+                                pP = pConnected;
                                 max = w;
                                 bContinue = true;
                             }
