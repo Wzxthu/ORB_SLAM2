@@ -776,7 +776,7 @@ void LocalMapping::FindLandmarks()
     const auto R = mpCurrentKeyFrame->GetRotation();
     const auto t = mpCurrentKeyFrame->GetTranslation();
     const auto K = mpCurrentKeyFrame->mK; // 3 x 3 intrinsic matrix
-    const auto invR = R.inv();
+    const auto invR = R.t();
 
     // Compute camera roll and pitch.
     float c_roll, c_pitch, c_yaw;
@@ -830,16 +830,17 @@ void LocalMapping::FindLandmarks()
         Point topRight(object.bbox.x + object.bbox.width, object.bbox.y);
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
+        float yaw_init = c_yaw - M_PI / 2;
 
         for (int i = 0; i < 10; ++i) {
             // Sample the landmark yaw in 360 degrees.
-            for (float l_yaw = 0; l_yaw < 2 * M_PI; l_yaw += M_PI / 3) {
+            for (float l_yaw = yaw_init- 45 / 180 * M_PI; l_yaw < yaw_init + 45 / 180 * M_PI; l_yaw += 6 / 180 * M_PI) {
                 // Sample the landmark roll in 180 degrees around the camera roll.
-                for (float l_roll = c_roll - M_PI; l_roll < c_roll + M_PI; l_roll += M_PI / 3) {
+                for (float l_roll = c_roll - 12 / 180 * M_PI; l_roll < c_roll + 12 / 180 * M_PI; l_roll += 3 / 180 * M_PI) {
                     // Sample the landmark pitch in 90 degrees around the camera pitch.
-                    for (float l_pitch = c_pitch - M_PI_2; l_pitch < c_pitch + M_PI_2; l_pitch += M_PI / 3) {
+                    for (float l_pitch = c_pitch - 12 / 180 * M_PI; l_pitch < c_pitch + 12 / 180 * M_PI; l_pitch += 3 / 180 * M_PI) {
                         // Recover rotation of the landmark.
-                        Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, l_yaw);
+                        Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, c_yaw);
                         Mat invRlw = Rlw.t();
 
                         // TODO: Compute the vanishing points from the pose.
@@ -924,6 +925,22 @@ void LocalMapping::FindLandmarks()
                             else {
                                 continue;
                             }
+                            // draw bbox
+                            cv::rectangle(mpCurrentKeyFrame->mImColor, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+                            // draw cube
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::waitKey(0);
                         }
                         // TODO: Score the proposal.
                         float totalError = 0;
