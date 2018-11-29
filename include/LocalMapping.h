@@ -33,19 +33,17 @@
 
 #include <mutex>
 
-
-namespace ORB_SLAM2
-{
+namespace ORB_SLAM2 {
 
 class Tracking;
 class LoopClosing;
 class Map;
 class FrameDrawer;
 
-class LocalMapping
-{
+class LocalMapping {
 public:
-    LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular);
+    LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular,
+                 float alignErrWeight = 0.7, float shapeErrWeight = 2.5, float shapeErrThresh = 2.f);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 
@@ -72,7 +70,8 @@ public:
     void RequestFinish();
     bool isFinished();
 
-    inline size_t KeyframesInQueue(){
+    inline size_t KeyframesInQueue()
+    {
         std::unique_lock<std::mutex> lock(mMutexNewKFs);
         return mlNewKeyFrames.size();
     }
@@ -89,9 +88,9 @@ protected:
 
     void KeyFrameCulling();
 
-    cv::Mat ComputeF12(KeyFrame* &pKF1, KeyFrame* &pKF2);
+    cv::Mat ComputeF12(KeyFrame*& pKF1, KeyFrame*& pKF2);
 
-    cv::Mat SkewSymmetricMatrix(const cv::Mat &v);
+    cv::Mat SkewSymmetricMatrix(const cv::Mat& v);
 
     bool mbMonocular;
 
@@ -130,6 +129,10 @@ protected:
 
     bool mbAcceptKeyFrames;
     std::mutex mMutexAccept;
+
+    float mAlignErrWeight;
+    float mShapeErrWeight;
+    float mShapeErrThresh;
 };
 
 } //namespace ORB_SLAM

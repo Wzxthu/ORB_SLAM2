@@ -43,13 +43,27 @@ static float ChamferDistance(const LineSegment& hypothesisEdge,
                              int numSamples = 10);
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
-static float AlignmentError(const Point& pt, const LineSegment& edge);
+static float AlignmentError(const Point2f& pt, const LineSegment& edge);
 
-LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular)
+template<class T>
+static inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
+{
+    return powf(pt1.x - pt2.x, 2) + powf(pt1.y - pt2.y, 2);
+}
+
+template<class T>
+static inline float Distance(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
+{
+    return sqrtf(DistanceSquare(pt1, pt2));
+}
+
+LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular,
+                           float alignErrWeight, float shapeErrWeight, float shapeErrThresh)
         :
         mbMonocular(bMonocular), mbResetRequested(false), mbFinishRequested(false), mbFinished(true), mpMap(pMap),
-        mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false), mbAcceptKeyFrames(true),
-        mpFrameDrawer(pFrameDrawer)
+        mpFrameDrawer(pFrameDrawer), mbAbortBA(false), mbStopped(false), mbStopRequested(false), mbNotStop(false),
+        mbAcceptKeyFrames(true), mAlignErrWeight(alignErrWeight), mShapeErrWeight(shapeErrWeight),
+        mShapeErrThresh(shapeErrThresh)
 {
 }
 
@@ -812,11 +826,11 @@ void LocalMapping::FindLandmarks()
             continue;
 
         // Choose the line segments lying in the bounding box for scoring.
-        vector<LineSeg> includedSegs;
-        includedSegs.reserve(lineSegs.size());
+        vector<LineSeg> segsInBbox;
+        segsInBbox.reserve(lineSegs.size());
         for (auto lineSeg : lineSegs) {
             if (lineSeg.first.inside(object.bbox) && lineSeg.second.inside(object.bbox)) {
-                includedSegs.emplace_back(lineSeg);
+                segsInBbox.emplace_back(lineSeg);
             }
         }
 
@@ -838,7 +852,16 @@ void LocalMapping::FindLandmarks()
         float yaw_init = c_yaw - M_PI / 2.0;
         int imgIdx = 0;
 
+        // TODO: Find landmarks with respect to the detected objects.
+        // Represent the proposal with the coordinates in frame of the 8 corners.
+        cv::Point2f proposalCorners[8];
+        cv::Point2f bestProposalCorners[8];
+        float bestErr = -1;
+        bool isCornerVisible[8] = {true, true, true, true};
+        // Sample corner on the top boundary.
         for (int i = 0; i < 10; ++i) {
+            proposalCorners[0] = cv::Point2f(object.bbox.x + object.bbox.width * i / 9,
+                                             object.bbox.y + object.bbox.height);
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = yaw_init - 45.0 / 180 * M_PI; l_yaw < yaw_init + 45.0 / 180 * M_PI; l_yaw += 6.0 / 180 * M_PI) {
                 // Sample the landmark roll in 180 degrees around the camera roll.
@@ -883,36 +906,41 @@ void LocalMapping::FindLandmarks()
                                 // 3 faces
                                 proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
                                 proposalCorners[2] = lineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
-                                proposalCorners[3] = lineIntersection(vp1_homo, proposalCorners[2], vp2_homo, proposalCorners[1]);
+                                proposalCorners[3] = lineIntersection(vp1_homo, proposalCorners[2], vp2_homo,
+                                                                      proposalCorners[1]);
                                 proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                isCornerVisible[1] = true;
-                                isCornerVisible[2] = true;
-                                isCornerVisible[3] = true;
+                                proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                      proposalCorners[2]);
+                                proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                      proposalCorners[1]);
+                                proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                      proposalCorners[5]);
                                 isCornerVisible[4] = true;
                                 isCornerVisible[5] = true;
                                 isCornerVisible[6] = true;
                                 isCornerVisible[7] = false;
                             }
-                            else if (vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width ||
-                                     vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
+                            else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
+                                     (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
                                 if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
                                     std::swap(vp1_homo, vp2_homo);
                                 }
                                 if (vp2_homo.x < object.bbox.x) {
                                     // 2 faces
-                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topLeft, botLeft);
-                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topRight, botRight);
-                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
-                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                    isCornerVisible[1] = true;
-                                    isCornerVisible[2] = true;
-                                    isCornerVisible[3] = true;
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topLeft,
+                                                                          botLeft);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topRight,
+                                                                          botRight);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
+                                                                          proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft,
+                                                                          botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                          proposalCorners[5]);
                                     isCornerVisible[4] = true;
                                     isCornerVisible[5] = false;
                                     isCornerVisible[6] = true;
@@ -920,16 +948,20 @@ void LocalMapping::FindLandmarks()
                                 }
                                 else {
                                     // 2 faces
-                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
-                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topLeft, botLeft);
-                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
-                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                    isCornerVisible[1] = true;
-                                    isCornerVisible[2] = true;
-                                    isCornerVisible[3] = true;
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight,
+                                                                          botRight);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topLeft,
+                                                                          botLeft);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
+                                                                          proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft,
+                                                                          botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                          proposalCorners[5]);
                                     isCornerVisible[4] = true;
                                     isCornerVisible[5] = false;
                                     isCornerVisible[6] = true;
@@ -960,10 +992,54 @@ void LocalMapping::FindLandmarks()
                             ++imgIdx;
                         }
                         // TODO: Score the proposal.
-                        float totalError = 0;
+                        float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
                         // Distance error.
+                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
+                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
+                        distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
+                        distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
+                        if (isCornerVisible[7])
+                            distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]), segsInBbox);
+                        if (isCornerVisible[6])
+                            distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
+                        if (isCornerVisible[5])
+                            distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
+                        if (isCornerVisible[4])
+                            distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
+                        if (isCornerVisible[4] && isCornerVisible[5])
+                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
+                        if (isCornerVisible[4] && isCornerVisible[6])
+                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
+                        if (isCornerVisible[5] && isCornerVisible[7])
+                            distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]), segsInBbox);
+                        if (isCornerVisible[6] && isCornerVisible[7])
+                            distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]), segsInBbox);
+                        // Angle alignment error.
+                        for (const auto& seg : segsInBbox) {
+                            float err1 = AlignmentError(cv::Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
+                            float err2 = AlignmentError(cv::Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
+                            float err3 = AlignmentError(cv::Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
+                            alignErr += min(err1, err2, err3);
+                        }
+                        // Shape error.
+                        float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
+                                            + Distance(proposalCorners[2], proposalCorners[3])
+                                            + Distance(proposalCorners[4], proposalCorners[5])
+                                            + Distance(proposalCorners[6], proposalCorners[7]);
+                        float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
+                                            + Distance(proposalCorners[1], proposalCorners[3])
+                                            + Distance(proposalCorners[4], proposalCorners[6])
+                                            + Distance(proposalCorners[5], proposalCorners[7]);
+                        shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 / edgeLenSum1;
+                        shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
+                        // Sum the errors by weight.
+                        totalErr = distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
 
-                        // TODO: Pick the proposal with the highest score.
+                        // Pick the proposal with the highest score.
+                        if (totalErr < bestErr || bestErr == -1) {
+                            bestErr = totalErr;
+                            memcpy(bestProposalCorners, proposalCorners, sizeof(proposalCorners));
+                        }
                     }
                 }
             }
@@ -971,7 +1047,9 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Reason the depth of the landmark from the best proposal.
 
-        // TODO: Store the best proposal into the keyframe.
+        // TODO: Store the pose correspondong to best proposal into the keyframe.
+
+        // TODO: Visualize the best 2D proposal.
     }
 
     // Visualize intermediate results used for finding landmarks.
@@ -1005,9 +1083,9 @@ static float Distance(const Point& pt, const LineSegment& edge)
     Vec2i v1(edge.first.x - pt.x, edge.first.y - pt.y);
     Vec2i v2(edge.second.x - pt.x, edge.second.y - pt.y);
     Vec2i v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
-    auto l1sq = v1[0] * v1[0] + v1[1] * v1[1];
-    auto l2sq = v2[0] * v2[0] + v2[1] * v2[1];
-    auto l3sq = v3[0] * v3[0] + v3[1] * v3[1];
+    auto l1sq = DistanceSquare(edge.first, pt);
+    auto l2sq = DistanceSquare(edge.second, pt);
+    auto l3sq = DistanceSquare(edge.first, edge.second);
     if (l1sq + l3sq < l2sq)
         return sqrtf(l2sq);
     else if (l2sq + l3sq < l1sq)
@@ -1025,7 +1103,8 @@ static float Distance(const Point& pt, const LineSegment& edge)
     }
 }
 
-static Point lineIntersection(Point A, Point B, Point C, Point D) {
+static Point lineIntersection(Point A, Point B, Point C, Point D)
+{
     // Line AB represented as a1x + b1y = c1
     float a1 = B.y - A.y;
     float b1 = A.x - B.x;
@@ -1042,7 +1121,8 @@ static Point lineIntersection(Point A, Point B, Point C, Point D) {
         // The lines are parallel. This is simplified
         // by returning a pair of FLT_MAX
         return Point(FLT_MAX, FLT_MAX);
-    } else {
+    }
+    else {
         float x = (b2 * c1 - b1 * c2) / determinant;
         float y = (a1 * c2 - a2 * c1) / determinant;
         return Point(x, y);
@@ -1075,10 +1155,10 @@ static float ChamferDistance(const LineSegment& hypothesis,
     return 0;
 }
 
-static float AlignmentError(const Point& pt, const LineSegment& edge)
+static float AlignmentError(const Point2f& pt, const LineSegment& edge)
 {
-    Vec2i v1(pt.x - edge.first.x, pt.y - edge.first.y);
-    Vec2i v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    Vec2f v1(pt.x - edge.first.x, pt.y - edge.first.y);
+    Vec2f v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
     float cosine = v1.dot(v2) / (norm(v1) * norm(v2));
     float angle = acos(cosine);
     if (angle > M_PI_2)
