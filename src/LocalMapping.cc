@@ -842,7 +842,7 @@ void LocalMapping::FindLandmarks()
         Point topRight(object.bbox.x + object.bbox.width, object.bbox.y);
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
-      
+
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
         cv::Point2f proposalCorners[8];
@@ -870,14 +870,15 @@ void LocalMapping::FindLandmarks()
                         Mat vp1 = K * invRlw * Mat(R1);
                         Mat vp2 = K * invRlw * Mat(R2);
                         Mat vp3 = K * invRlw * Mat(R3);
-                        Point vp1_homo(vp1.at<float>(0, 0) / vp1.at<float>(2, 0), vp1.at<float>(1, 0) / vp1.at<float>(2, 0));
-                        Point vp2_homo(vp2.at<float>(0, 0) / vp2.at<float>(2, 0), vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
-                        Point vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0), vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
+                        Point2f vp1_homo(vp1.at<float>(0, 0) / vp1.at<float>(2, 0),
+                                         vp1.at<float>(1, 0) / vp1.at<float>(2, 0));
+                        Point2f vp2_homo(vp2.at<float>(0, 0) / vp2.at<float>(2, 0),
+                                         vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
+                        Point2f vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0),
+                                         vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
 
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        Point proposalCorners[8];
-                        bool isCornerVisible[8] = {true};
-                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)){
+                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)) {
                             // 1 face
                             // proposalCorners[1] = lineIntersection(vp2_homo, proposalCorners[0], topRight, botRight);
                             // proposalCorners[2] = lineIntersection(vp3_homo, proposalCorners[0], botLeft, botRight);
@@ -885,58 +886,67 @@ void LocalMapping::FindLandmarks()
                             continue;
                         }
                         else {
-                            if (vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x ||
-                                vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
+                            if ((vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x) ||
+                                (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x)) {
                                 if (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
                                     std::swap(vp1_homo, vp2_homo);
                                 }
                                 // 3 faces
                                 proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
                                 proposalCorners[2] = lineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
-                                proposalCorners[3] = lineIntersection(vp1_homo, proposalCorners[2], vp2_homo, proposalCorners[1]);
+                                proposalCorners[3] = lineIntersection(vp1_homo, proposalCorners[2], vp2_homo,
+                                                                      proposalCorners[1]);
                                 proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                isCornerVisible[1] = true;
-                                isCornerVisible[2] = true;
-                                isCornerVisible[3] = true;
+                                proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                      proposalCorners[2]);
+                                proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                      proposalCorners[1]);
+                                proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                      proposalCorners[5]);
                                 isCornerVisible[4] = true;
                                 isCornerVisible[5] = true;
                                 isCornerVisible[6] = true;
                             }
-                            else if (vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width ||
-                                     vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
+                            else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
+                                     (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
                                 if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
                                     std::swap(vp1_homo, vp2_homo);
                                 }
                                 if (vp2_homo.x < object.bbox.x) {
                                     // 2 faces
-                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topLeft, botLeft);
-                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topRight, botRight);
-                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
-                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                    isCornerVisible[1] = true;
-                                    isCornerVisible[2] = true;
-                                    isCornerVisible[3] = true;
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topLeft,
+                                                                          botLeft);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topRight,
+                                                                          botRight);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
+                                                                          proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft,
+                                                                          botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                          proposalCorners[5]);
                                     isCornerVisible[4] = true;
                                     isCornerVisible[6] = true;
                                 }
                                 else {
                                     // 2 faces
-                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
-                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topLeft, botLeft);
-                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
-                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
-                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
-                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
-                                    isCornerVisible[1] = true;
-                                    isCornerVisible[2] = true;
-                                    isCornerVisible[3] = true;
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight,
+                                                                          botRight);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topLeft,
+                                                                          botLeft);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
+                                                                          proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft,
+                                                                          botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                          proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                          proposalCorners[5]);
                                     isCornerVisible[4] = true;
                                     isCornerVisible[6] = true;
                                 }
@@ -1057,7 +1067,8 @@ static float Distance(const Point& pt, const LineSegment& edge)
     }
 }
 
-static Point lineIntersection(Point A, Point B, Point C, Point D) {
+static Point lineIntersection(Point A, Point B, Point C, Point D)
+{
     // Line AB represented as a1x + b1y = c1
     float a1 = B.y - A.y;
     float b1 = A.x - B.x;
@@ -1074,7 +1085,8 @@ static Point lineIntersection(Point A, Point B, Point C, Point D) {
         // The lines are parallel. This is simplified
         // by returning a pair of FLT_MAX
         return Point(FLT_MAX, FLT_MAX);
-    } else {
+    }
+    else {
         float x = (b2 * c1 - b1 * c2) / determinant;
         float y = (a1 * c2 - a2 * c1) / determinant;
         return Point(x, y);
