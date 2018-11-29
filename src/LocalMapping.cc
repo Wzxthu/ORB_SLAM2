@@ -825,24 +825,25 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
+        Point proposalCorners[8];
+        bool isCornerVisible[8] = {true};
         // Sample corner on the top boundary.
         Point topLeft(object.bbox.x, object.bbox.y);
         Point topRight(object.bbox.x + object.bbox.width, object.bbox.y);
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
-        float yaw_init = c_yaw - M_PI / 2;
+        float yaw_init = c_yaw - M_PI / 2.0;
 
         for (int i = 0; i < 10; ++i) {
             // Sample the landmark yaw in 360 degrees.
-            for (float l_yaw = yaw_init- 45 / 180 * M_PI; l_yaw < yaw_init + 45 / 180 * M_PI; l_yaw += 6 / 180 * M_PI) {
+            for (float l_yaw = yaw_init - 45.0 / 180 * M_PI; l_yaw < yaw_init + 45.0 / 180 * M_PI; l_yaw += 6.0 / 180 * M_PI) {
                 // Sample the landmark roll in 180 degrees around the camera roll.
-                for (float l_roll = c_roll - 12 / 180 * M_PI; l_roll < c_roll + 12 / 180 * M_PI; l_roll += 3 / 180 * M_PI) {
+                for (float l_roll = c_roll - 12.0 / 180 * M_PI; l_roll < c_roll + 12.0 / 180 * M_PI; l_roll += 3.0 / 180 * M_PI) {
                     // Sample the landmark pitch in 90 degrees around the camera pitch.
-                    for (float l_pitch = c_pitch - 12 / 180 * M_PI; l_pitch < c_pitch + 12 / 180 * M_PI; l_pitch += 3 / 180 * M_PI) {
+                    for (float l_pitch = c_pitch - 12.0 / 180 * M_PI; l_pitch < c_pitch + 12.0 / 180 * M_PI; l_pitch += 3.0 / 180 * M_PI) {
                         // Recover rotation of the landmark.
                         Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, c_yaw);
                         Mat invRlw = Rlw.t();
-
                         // TODO: Compute the vanishing points from the pose.
                         cv::Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
                         cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
@@ -853,10 +854,13 @@ void LocalMapping::FindLandmarks()
                         Point vp1_homo(vp1.at<float>(0, 0) / vp1.at<float>(2, 0), vp1.at<float>(1, 0) / vp1.at<float>(2, 0));
                         Point vp2_homo(vp2.at<float>(0, 0) / vp2.at<float>(2, 0), vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
                         Point vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0), vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
-
+                        // cout << K << endl;
+                        // cout << invRlw << endl;
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        Point proposalCorners[8];
-                        bool isCornerVisible[8] = {true};
+                        if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
+                            vp3_homo.y < object.bbox.y + object.bbox.height) {
+                            continue;
+                        }
                         if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)){
                             // 1 face
                             // proposalCorners[1] = lineIntersection(vp2_homo, proposalCorners[0], topRight, botRight);
@@ -885,6 +889,7 @@ void LocalMapping::FindLandmarks()
                                 isCornerVisible[4] = true;
                                 isCornerVisible[5] = true;
                                 isCornerVisible[6] = true;
+                                isCornerVisible[7] = false;
                             }
                             else if (vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width ||
                                      vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
@@ -904,7 +909,9 @@ void LocalMapping::FindLandmarks()
                                     isCornerVisible[2] = true;
                                     isCornerVisible[3] = true;
                                     isCornerVisible[4] = true;
+                                    isCornerVisible[5] = false;
                                     isCornerVisible[6] = true;
+                                    isCornerVisible[7] = false;
                                 }
                                 else {
                                     // 2 faces
@@ -919,27 +926,32 @@ void LocalMapping::FindLandmarks()
                                     isCornerVisible[2] = true;
                                     isCornerVisible[3] = true;
                                     isCornerVisible[4] = true;
+                                    isCornerVisible[5] = false;
                                     isCornerVisible[6] = true;
+                                    isCornerVisible[7] = false;
                                 }
                             }
                             else {
                                 continue;
                             }
                             // draw bbox
-                            cv::rectangle(mpCurrentKeyFrame->mImColor, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+                            Mat image;
+                            mpCurrentKeyFrame->mImColor.copyTo(image);
+                            cv::rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+                            cv::waitKey(0);
                             // draw cube
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(mpCurrentKeyFrame->mImColor, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            cv::line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
                             cv::waitKey(0);
                         }
                         // TODO: Score the proposal.
