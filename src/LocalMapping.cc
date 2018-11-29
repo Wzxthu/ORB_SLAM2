@@ -857,15 +857,16 @@ void LocalMapping::FindLandmarks()
                         // cout << K << endl;
                         // cout << invRlw << endl;
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
-                            vp3_homo.y < object.bbox.y + object.bbox.height) {
-                            continue;
-                        }
                         if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)){
                             // 1 face
                             // proposalCorners[1] = lineIntersection(vp2_homo, proposalCorners[0], topRight, botRight);
                             // proposalCorners[2] = lineIntersection(vp3_homo, proposalCorners[0], botLeft, botRight);
                             // proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[2], vp3_homo, proposalCorners[1]);
+                            continue;
+                        }
+                        else if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
+                            vp3_homo.y < object.bbox.y + object.bbox.height ||
+                            vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
                             continue;
                         }
                         else {
@@ -937,6 +938,7 @@ void LocalMapping::FindLandmarks()
                             // draw bbox
                             Mat image;
                             mpCurrentKeyFrame->mImColor.copyTo(image);
+                            imshow( "Key Frame", image);
                             cv::rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
                             cv::waitKey(0);
                             // draw cube
