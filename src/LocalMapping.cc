@@ -37,6 +37,7 @@ using namespace std;
 using namespace cv;
 
 static float Distance(const Point& pt, const LineSegment& edge);
+static Point lineIntersection(Point A, Point B, Point C, Point D);
 static float ChamferDistance(const LineSegment& hypothesisEdge,
                              const vector<LineSegment>& actualEdges,
                              int numSamples = 10);
@@ -824,13 +825,13 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
-        cv::Point proposalCorners[8];
-        bool isCornerVisible[8] = {true};
         // Sample corner on the top boundary.
-        for (int i = 0; i < 10; ++i) {
-            proposalCorners[0] = cv::Point(object.bbox.x + object.bbox.width * i / 9,
-                                           object.bbox.y + object.bbox.height);
+        Point topLeft(object.bbox.x, object.bbox.y);
+        Point topRight(object.bbox.x + object.bbox.width, object.bbox.y);
+        Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
+        Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
 
+        for (int i = 0; i < 10; ++i) {
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = 0; l_yaw < 2 * M_PI; l_yaw += M_PI / 3) {
                 // Sample the landmark roll in 180 degrees around the camera roll.
@@ -846,14 +847,84 @@ void LocalMapping::FindLandmarks()
                         cv::Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
                         cv::Vec3f R3(0, 0, 1);
                         Mat vp1 = K * invRlw * Mat(R1);
-                        vp1 = vp1 / vp1.at<float>(2, 0);
                         Mat vp2 = K * invRlw * Mat(R2);
-                        vp2 = vp2 / vp2.at<float>(2, 0);
                         Mat vp3 = K * invRlw * Mat(R3);
-                        vp3 = vp3 / vp3.at<float>(2, 0);
+                        Point vp1_homo(vp1.at<float>(0, 0) / vp1.at<float>(2, 0), vp1.at<float>(1, 0) / vp1.at<float>(2, 0));
+                        Point vp2_homo(vp2.at<float>(0, 0) / vp2.at<float>(2, 0), vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
+                        Point vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0), vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
 
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-
+                        Point proposalCorners[8];
+                        bool isCornerVisible[8] = {true};
+                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)){
+                            // 1 face
+                            // proposalCorners[1] = lineIntersection(vp2_homo, proposalCorners[0], topRight, botRight);
+                            // proposalCorners[2] = lineIntersection(vp3_homo, proposalCorners[0], botLeft, botRight);
+                            // proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[2], vp3_homo, proposalCorners[1]);
+                            continue;
+                        }
+                        else {
+                            proposalCorners[0] = cv::Point(object.bbox.x + object.bbox.width * i / 9, object.bbox.y);
+                            if (vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x ||
+                                vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
+                                if (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
+                                    std::swap(vp1_homo, vp2_homo);
+                                }
+                                // 3 faces
+                                proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
+                                proposalCorners[2] = lineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
+                                proposalCorners[3] = lineIntersection(vp1_homo, proposalCorners[2], vp2_homo, proposalCorners[1]);
+                                proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
+                                proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
+                                proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
+                                proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
+                                isCornerVisible[1] = true;
+                                isCornerVisible[2] = true;
+                                isCornerVisible[3] = true;
+                                isCornerVisible[4] = true;
+                                isCornerVisible[5] = true;
+                                isCornerVisible[6] = true;
+                            }
+                            else if (vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width ||
+                                     vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
+                                if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
+                                    std::swap(vp1_homo, vp2_homo);
+                                }
+                                if (vp2_homo.x < object.bbox.x) {
+                                    // 2 faces
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topLeft, botLeft);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topRight, botRight);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
+                                    isCornerVisible[1] = true;
+                                    isCornerVisible[2] = true;
+                                    isCornerVisible[3] = true;
+                                    isCornerVisible[4] = true;
+                                    isCornerVisible[6] = true;
+                                }
+                                else {
+                                    // 2 faces
+                                    proposalCorners[1] = lineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
+                                    proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[1], topLeft, botLeft);
+                                    proposalCorners[2] = lineIntersection(vp1_homo, proposalCorners[3], vp2_homo, proposalCorners[0]);
+                                    proposalCorners[4] = lineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
+                                    proposalCorners[5] = lineIntersection(vp1_homo, proposalCorners[4], vp3_homo, proposalCorners[2]);
+                                    proposalCorners[6] = lineIntersection(vp2_homo, proposalCorners[4], vp3_homo, proposalCorners[1]);
+                                    proposalCorners[7] = lineIntersection(vp1_homo, proposalCorners[6], vp2_homo, proposalCorners[5]);
+                                    isCornerVisible[1] = true;
+                                    isCornerVisible[2] = true;
+                                    isCornerVisible[3] = true;
+                                    isCornerVisible[4] = true;
+                                    isCornerVisible[6] = true;
+                                }
+                            }
+                            else {
+                                continue;
+                            }
+                        }
                         // TODO: Score the proposal.
                         float totalError = 0;
                         // Distance error.
@@ -895,7 +966,7 @@ static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
     return rot;
 }
 
-float Distance(const Point& pt, const LineSegment& edge)
+static float Distance(const Point& pt, const LineSegment& edge)
 {
     Vec2i v1(edge.first.x - pt.x, edge.first.y - pt.y);
     Vec2i v2(edge.second.x - pt.x, edge.second.y - pt.y);
@@ -920,9 +991,33 @@ float Distance(const Point& pt, const LineSegment& edge)
     }
 }
 
-float ChamferDistance(const LineSegment& hypothesis,
-                      const vector<LineSegment>& actualEdges,
-                      int numSamples)
+static Point lineIntersection(Point A, Point B, Point C, Point D) {
+    // Line AB represented as a1x + b1y = c1
+    float a1 = B.y - A.y;
+    float b1 = A.x - B.x;
+    float c1 = a1 * (A.x) + b1 * (A.y);
+
+    // Line CD represented as a2x + b2y = c2
+    float a2 = D.y - C.y;
+    float b2 = C.x - D.x;
+    float c2 = a2 * (C.x) + b2 * (C.y);
+
+    float determinant = a1 * b2 - a2 * b1;
+
+    if (determinant == 0) {
+        // The lines are parallel. This is simplified
+        // by returning a pair of FLT_MAX
+        return Point(FLT_MAX, FLT_MAX);
+    } else {
+        float x = (b2 * c1 - b1 * c2) / determinant;
+        float y = (a1 * c2 - a2 * c1) / determinant;
+        return Point(x, y);
+    }
+}
+
+static float ChamferDistance(const LineSegment& hypothesis,
+                             const vector<LineSegment>& actualEdges,
+                             int numSamples)
 {
     int dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
     int dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
