@@ -828,11 +828,15 @@ void LocalMapping::FindLandmarks()
         Point proposalCorners[8];
         bool isCornerVisible[8] = {true};
         // Sample corner on the top boundary.
+        if (object.bbox.x < 0 || object.bbox.y < 0) {
+            continue;
+        }
         Point topLeft(object.bbox.x, object.bbox.y);
         Point topRight(object.bbox.x + object.bbox.width, object.bbox.y);
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
         float yaw_init = c_yaw - M_PI / 2.0;
+        int imgIdx = 0;
 
         for (int i = 0; i < 10; ++i) {
             // Sample the landmark yaw in 360 degrees.
@@ -865,12 +869,12 @@ void LocalMapping::FindLandmarks()
                             continue;
                         }
                         else if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
-                            vp3_homo.y < object.bbox.y + object.bbox.height ||
-                            vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
+                                 vp3_homo.y < object.bbox.y + object.bbox.height ||
+                                 vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
                             continue;
                         }
                         else {
-                            proposalCorners[0] = cv::Point(object.bbox.x + object.bbox.width * i / 9, object.bbox.y);
+                            proposalCorners[0] = Point(object.bbox.x + object.bbox.width * i / 9, object.bbox.y);
                             if (vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x ||
                                 vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
                                 if (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
@@ -938,9 +942,7 @@ void LocalMapping::FindLandmarks()
                             // draw bbox
                             Mat image;
                             mpCurrentKeyFrame->mImColor.copyTo(image);
-                            imshow( "Key Frame", image);
                             cv::rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
-                            cv::waitKey(0);
                             // draw cube
                             cv::line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
                             cv::line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
@@ -954,7 +956,8 @@ void LocalMapping::FindLandmarks()
                             cv::line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
                             cv::line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
                             cv::line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::waitKey(0);
+                            imwrite("/Users/jack/Desktop/16-822 Geometry-based Methods in Vision/Project/images/" + std::to_string(imgIdx) + ".jpg", image);
+                            ++imgIdx;
                         }
                         // TODO: Score the proposal.
                         float totalError = 0;
