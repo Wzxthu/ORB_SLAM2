@@ -25,6 +25,16 @@ using namespace std;
 
 namespace ORB_SLAM2 {
 
+void Landmark::SetDimension(const LandmarkDimension& dimension) {
+    unique_lock<mutex> lock(mMutexPose);
+    mDimension = dimension;
+}
+
+LandmarkDimension Landmark::GetDimension() {
+    unique_lock<mutex> lock(mMutexPose);
+    return mDimension;
+}
+
 void Landmark::SetPose(const cv::Mat& Tlw_)
 {
     unique_lock<mutex> lock(mMutexPose);

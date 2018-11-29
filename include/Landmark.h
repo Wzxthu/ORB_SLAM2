@@ -24,8 +24,20 @@
 
 namespace ORB_SLAM2 {
 
+struct LandmarkDimension {
+    float height{};   // Corresponding to vanishing point 3.
+    float edge13{};   // Corresponding to vanishing point 1.
+    float edge12{};   // Corresponding to vanishing point 2.
+
+    LandmarkDimension() { }
+    LandmarkDimension(float height_, float edge13_, float edge12_)
+            :height(height_), edge13(edge13_), edge12(edge12_) { }
+};
+
 class Landmark {
 public:
+    void SetDimension(const LandmarkDimension& dimension);
+    LandmarkDimension GetDimension();
     void SetPose(const cv::Mat& Tlw_);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
@@ -37,10 +49,13 @@ public:
     int classIdx;
     int landmarkID;
 private:
-    // SE3 Pose and landmark center.
+    // SE3 Pose.
     cv::Mat Tlw;
     cv::Mat Twl;
+    // Landmark center.
     cv::Mat Lw;
+    // Landmark dimension.
+    LandmarkDimension mDimension;
 
     std::mutex mMutexPose;
 };
