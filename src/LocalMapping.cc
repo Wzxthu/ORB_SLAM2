@@ -850,7 +850,7 @@ void LocalMapping::FindLandmarks()
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
         float yaw_init = c_yaw - M_PI / 2.0;
-        int imgIdx = 0;
+        int imgIdx = -1;
 
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
@@ -971,25 +971,28 @@ void LocalMapping::FindLandmarks()
                             else {
                                 continue;
                             }
-                            // draw bbox
-                            Mat image;
-                            mpCurrentKeyFrame->mImColor.copyTo(image);
-                            cv::rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
-                            // draw cube
-                            cv::line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            cv::line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                            imwrite("/Users/jack/Desktop/16-822 Geometry-based Methods in Vision/Project/images/" + std::to_string(imgIdx) + ".jpg", image);
-                            ++imgIdx;
+                            if (imgIdx >= 0) {
+                                // draw bbox
+                                Mat image;
+                                mpCurrentKeyFrame->mImColor.copyTo(image);
+                                cv::rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+                                // draw cube
+                                cv::line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                                cv::line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                                imwrite("/Users/jack/Desktop/16-822 Geometry-based Methods in Vision/Project/images/" +
+                                        std::to_string(imgIdx) + ".jpg", image);
+                                ++imgIdx;
+                            }
                         }
                         // TODO: Score the proposal.
                         float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
