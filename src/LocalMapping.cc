@@ -82,7 +82,8 @@ void LocalMapping::Run()
 {
     ocl::setUseOpenCL(true);
 
-    mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights");
+    mpObjectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights",
+                                          .45, .6, 224 * 224);
     mpLineSegDetector = new LineSegmentDetector();
 
     mbFinished = false;

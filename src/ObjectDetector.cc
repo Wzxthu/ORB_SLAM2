@@ -34,14 +34,15 @@ ObjectDetector::ObjectDetector(
         const char* cfgFile,
         const char* weightFile,
         float nmsThresh,
-        float confThresh)
+        float confThresh,
+        float inputArea)
         :
         mNet(readNetFromDarknet(cfgFile, weightFile)),
-        mNmsThresh(nmsThresh), mConfThresh(confThresh)
+        mNmsThresh(nmsThresh), mConfThresh(confThresh), mInputArea(inputArea)
 {
     ocl::Context context = ocl::Context::getDefault(true);
 
-    std::vector<ocl::PlatformInfo> platforms;
+    vector<ocl::PlatformInfo> platforms;
     ocl::getPlatfomsInfo(platforms);
     for (auto& platform : platforms) {
         //Platform Name
@@ -55,15 +56,15 @@ ObjectDetector::ObjectDetector(
             int deviceType = currentDevice.type();
             cout << "Device name:  " << currentDevice.name() << endl;
             if (deviceType == 2)
-                cout << context.ndevices() << " CPU devices are detected." << std::endl;
+                cout << context.ndevices() << " CPU devices are detected." << endl;
             if (deviceType == 4)
-                cout << context.ndevices() << " GPU devices are detected." << std::endl;
+                cout << context.ndevices() << " GPU devices are detected." << endl;
             cout << "===============================================" << endl << endl;
         }
     }
 
     ocl::Device device;
-    std::string deviceName;
+    string deviceName;
     for (int i = 0; i < context.ndevices(); i++) {
         device = context.device(i);
         deviceName = device.name();
@@ -81,14 +82,26 @@ ObjectDetector::ObjectDetector(
 
     // Get the names of the output layers in names
     mOutputNames.resize(outLayers.size());
-    for (size_t i = 0; i < outLayers.size(); ++i)
+    cout << "YOLOv3 outputs from layers:" << endl;
+    for (size_t i = 0; i < outLayers.size(); ++i) {
         mOutputNames[i] = layersNames[outLayers[i] - 1];
+        cout << "\t" << mOutputNames[i] << endl;
+    }
 }
 
-void ObjectDetector::Detect(const cv::Mat& im, std::vector<Object>& objects)
+void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
 {
+    // Compute the input size to fit the preset input area. Both width and height should be times of 32.
+    float resizeRatio = sqrtf(mInputArea / (im.cols * im.rows));
+    int inputWidth = static_cast<int>(ceil(im.cols * resizeRatio / 32)) << 5;
+    int inputHeight = static_cast<int>(ceil(im.rows * resizeRatio / 32)) << 5;
+
+//    inputWidth = inputHeight = 416;
+
+    cout << "Input Size: " << inputWidth << "x" << inputHeight << endl;
+
     // Create a 4D blob from the frame.
-    blobFromImage(im, mBlob, 1 / 255.0, cvSize(mInputWidth, mInputHeight), Scalar(0, 0, 0), true, false);
+    blobFromImage(im, mBlob, 1 / 255.0, cvSize(inputWidth, inputHeight), Scalar(0, 0, 0), true, false);
 
     //Sets the input to the network
     mNet.setInput(mBlob);
@@ -98,17 +111,21 @@ void ObjectDetector::Detect(const cv::Mat& im, std::vector<Object>& objects)
     mNet.forward(outs, mOutputNames);
 
     // Remove the bounding boxes with low confidence
-    Postprocess(im, outs, objects);
+    Postprocess(im, outs, objects, inputWidth, inputHeight);
 }
 
 // Remove the bounding boxes with low confidence using non-maxima suppression
-void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::vector<Object>& objects)
+void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, vector<Object>& objects,
+                                 int inputWidth, int inputHeight)
 {
     vector<int> classIds;
     vector<float> confidences;
     vector<Rect> boxes;
 
     for (const auto& out : outs) {
+        float widthRatio = float(im.cols * inputHeight) / inputWidth;
+        float heightRatio = float(im.rows * inputWidth) / inputHeight;
+
         // Scan through all the bounding boxes output from the network and keep only the
         // ones with high confidence scores. Assign the box's class label as the class
         // with the highest score for the box.
@@ -120,12 +137,15 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, std::ve
             // Get the value and location of the maximum score
             minMaxLoc(scores, nullptr, &confidence, nullptr, &classIdPoint);
             if (confidence > mConfThresh) {
+//                cout << data[0] << ' ' << data[1] << ' ' << data[2] << ' ' << data[3] << endl;
                 int centerX = (int) (data[0] * im.cols);
                 int centerY = (int) (data[1] * im.rows);
-                int width = (int) (data[2] * im.cols);
-                int height = (int) (data[3] * im.rows);
+                int width = (int) (data[2] * widthRatio);
+                int height = (int) (data[3] * heightRatio);
                 int left = centerX - width / 2;
                 int top = centerY - height / 2;
+
+                cout << "BBox size: " << height << ' ' << width << endl;
 
                 classIds.push_back(classIdPoint.x);
                 confidences.push_back((float) confidence);

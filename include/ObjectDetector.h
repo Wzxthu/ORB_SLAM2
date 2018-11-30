@@ -32,23 +32,26 @@ struct Object {
     float conf;
     int classIdx;
 
-    Object(const cv::Rect& bbox_, float conf_, int classIdx_): bbox(bbox_), conf(conf_), classIdx(classIdx_) {}
+    Object(const cv::Rect& bbox_, float conf_, int classIdx_)
+            :bbox(bbox_), conf(conf_), classIdx(classIdx_) { }
 };
 
 /// Based on YOLOv3 from DarkNet.
 class ObjectDetector {
 public:
     ObjectDetector(
-            const char *cfgFile,
-            const char *weightFile,
-            float nmsThresh=.45,
-            float thresh=.5);
+            const char* cfgFile,
+            const char* weightFile,
+            float nmsThresh = .45,
+            float confThresh = .5,
+            float inputArea = 416 * 416);
 
-    void Detect(const cv::Mat &im, std::vector<Object> &objects);
+    void Detect(const cv::Mat& im, std::vector<Object>& objects);
 
 private:
     // Remove the bounding boxes with low confidence using non-maxima suppression
-    void Postprocess(const cv::Mat& im, const std::vector<cv::Mat>& outs, std::vector<Object>& objects);
+    void Postprocess(const cv::Mat& im, const std::vector<cv::Mat>& outs, std::vector<Object>& objects,
+                     int inputWidth, int inputHeight);
 
 private:
     cv::dnn::Net mNet;
@@ -56,8 +59,7 @@ private:
     float mNmsThresh;
     float mConfThresh;
 
-    const int mInputWidth = 416;        // Width of network's input image
-    const int mInputHeight = 416;       // Height of network's input image
+    float mInputArea;
 
     std::vector<cv::String> mOutputNames;
 };
