@@ -822,8 +822,9 @@ void LocalMapping::FindLandmarks()
         // Remove objects already seen in previous keyframes.
         bool seen = false;
         for (const auto& center: projCenters) {
-            // TODO: Change to check if the previous center is near the center of the current bounding box.
-            if (center.inside(object.bbox)) {
+            // Check if the previous center is near the center of the current bounding box.
+            if (max(center.x - object.bbox.x, center.y - object.bbox.y)
+                <= min(object.bbox.width, object.bbox.height) >> 2) {
                 seen = true;
                 break;
             }
