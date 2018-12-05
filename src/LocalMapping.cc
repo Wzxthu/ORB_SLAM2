@@ -22,6 +22,7 @@
 #include "LoopClosing.h"
 #include "ORBmatcher.h"
 #include "Optimizer.h"
+#include <sys/stat.h>
 
 #include <mutex>
 #include <chrono>
@@ -31,6 +32,7 @@
 #include <utility>
 #include <vector>
 #include <opencv2/core/ocl.hpp>
+
 
 using namespace std;
 using namespace cv;
@@ -848,7 +850,7 @@ void LocalMapping::FindLandmarks()
         Point botLeft(object.bbox.x, object.bbox.y + object.bbox.height);
         Point botRight(object.bbox.x + object.bbox.width, object.bbox.y + object.bbox.height);
         float yaw_init = c_yaw - M_PI / 2;
-        int imgIdx = -1;
+        int imgIdx = 0;
 
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
@@ -888,25 +890,17 @@ void LocalMapping::FindLandmarks()
                                        vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
                         Point vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0),
                                        vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
-                        // cout << K << endl;
-                        // cout << invRlw << endl;
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox)) {
-                            // 1 face
-                            // proposalCorners[1] = lineIntersection(vp2_homo, proposalCorners[0], topRight, botRight);
-                            // proposalCorners[2] = lineIntersection(vp3_homo, proposalCorners[0], botLeft, botRight);
-                            // proposalCorners[3] = lineIntersection(vp2_homo, proposalCorners[2], vp3_homo, proposalCorners[1]);
-                            continue;
-                        }
-                        else if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
-                                 vp3_homo.y < object.bbox.y + object.bbox.height ||
-                                 vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
+                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox) ||
+                            vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
+                            vp3_homo.y < object.bbox.y + object.bbox.height ||
+                            vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
                             continue;
                         }
                         else {
                             proposalCorners[0] = Point(object.bbox.x + object.bbox.width * i / 9, object.bbox.y);
-                            if ((vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x) ||
-                                (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x)) {
+                            if ((vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x + object.bbox.width) ||
+                                (vp1_homo.x > object.bbox.x + object.bbox.width && vp2_homo.x < object.bbox.x)) {
                                 if (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
                                     swap(vp1_homo, vp2_homo);
                                 }
@@ -978,7 +972,7 @@ void LocalMapping::FindLandmarks()
                             else {
                                 continue;
                             }
-                            if (imgIdx >= 0) {
+                            if (imgIdx%20 == 0) {
                                 // draw bbox
                                 Mat image;
                                 mpCurrentKeyFrame->mImColor.copyTo(image);
@@ -996,62 +990,103 @@ void LocalMapping::FindLandmarks()
                                 line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
                                 line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
                                 line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                                if (mkdir("Outputs", '0777') != -1) {
+                                    std::cout << "Success!" << endl;
+                                }
                                 imwrite("Outputs/" + to_string(imgIdx) + ".jpg", image);
                                 ++imgIdx;
                             }
-                        }
-                        // TODO: Score the proposal.
-                        float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
-                        // Distance error.
-                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
-                        if (isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]), segsInBbox);
-                        if (isCornerVisible[6])
-                            distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
-                        if (isCornerVisible[5])
-                            distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
-                        if (isCornerVisible[4])
-                            distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
-                        if (isCornerVisible[4] && isCornerVisible[5])
-                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
-                        if (isCornerVisible[4] && isCornerVisible[6])
-                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
-                        if (isCornerVisible[5] && isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]), segsInBbox);
-                        if (isCornerVisible[6] && isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]), segsInBbox);
-                        // Angle alignment error.
-                        for (const auto& seg : segsInBbox) {
-                            float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
-                            float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
-                            float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
-                            alignErr += min(min(err1, err2), err3);
-                        }
-                        // Shape error.
-                        float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
-                                            + Distance(proposalCorners[2], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[5])
-                                            + Distance(proposalCorners[6], proposalCorners[7]);
-                        float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
-                                            + Distance(proposalCorners[1], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[6])
-                                            + Distance(proposalCorners[5], proposalCorners[7]);
-                        shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 / edgeLenSum1;
-                        shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
-                        // Sum the errors by weight.
-                        totalErr = distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
+                            {
+                                // TODO: Score the proposal.
+                                float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
+                                // Distance error.
+                                distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]),
+                                                           segsInBbox);
+                                distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]),
+                                                           segsInBbox);
+                                distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]),
+                                                           segsInBbox);
+                                distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]),
+                                                           segsInBbox);
+                                if (isCornerVisible[7])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]),
+                                                               segsInBbox);
+                                if (isCornerVisible[6])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]),
+                                                               segsInBbox);
+                                if (isCornerVisible[5])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]),
+                                                               segsInBbox);
+                                if (isCornerVisible[4])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]),
+                                                               segsInBbox);
+                                if (isCornerVisible[4] && isCornerVisible[5])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]),
+                                                               segsInBbox);
+                                if (isCornerVisible[4] && isCornerVisible[6])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]),
+                                                               segsInBbox);
+                                if (isCornerVisible[5] && isCornerVisible[7])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]),
+                                                               segsInBbox);
+                                if (isCornerVisible[6] && isCornerVisible[7])
+                                    distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]),
+                                                               segsInBbox);
+                                // Angle alignment error.
+                                for (const auto &seg : segsInBbox) {
+                                    float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
+                                    float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
+                                    float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
+                                    alignErr += min(min(err1, err2), err3);
+                                }
+                                // Shape error.
+                                float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
+                                                    + Distance(proposalCorners[2], proposalCorners[3])
+                                                    + Distance(proposalCorners[4], proposalCorners[5])
+                                                    + Distance(proposalCorners[6], proposalCorners[7]);
+                                float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
+                                                    + Distance(proposalCorners[1], proposalCorners[3])
+                                                    + Distance(proposalCorners[4], proposalCorners[6])
+                                                    + Distance(proposalCorners[5], proposalCorners[7]);
+                                shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 /
+                                                                                                   edgeLenSum1;
+                                shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
+                                // Sum the errors by weight.
+                                totalErr = distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
 
-                        // Pick the proposal with the highest score.
-                        if (totalErr < bestErr || bestErr == -1) {
-                            bestErr = totalErr;
-                            memcpy(bestProposalCorners, proposalCorners, sizeof(proposalCorners));
+                                // Pick the proposal with the highest score.
+                                if (totalErr < bestErr || bestErr == -1) {
+                                    bestErr = totalErr;
+                                    memcpy(bestProposalCorners, proposalCorners, sizeof(proposalCorners));
+                                }
+                            }
                         }
                     }
                 }
             }
+        }
+        {
+            // draw bbox
+            Mat image;
+            mpCurrentKeyFrame->mImColor.copyTo(image);
+            rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+            // draw cube
+            line(image, bestProposalCorners[0], bestProposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[1], bestProposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[3], bestProposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[2], bestProposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[0], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[1], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[2], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[3], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[7], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[6], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[4], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(image, bestProposalCorners[5], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+            if (mkdir("Outputs", '0777') != -1) {
+                std::cout << "Success!" << endl;
+            }
+            imwrite("Outputs/best.jpg", image);
         }
 
         // TODO: Reason the depth of the landmark from the best proposal.
