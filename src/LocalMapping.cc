@@ -779,8 +779,8 @@ void LocalMapping::FindLandmarks()
     mpObjectDetector->Detect(mpCurrentKeyFrame->mImColor, objects2D);
 
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
-    duration<double> time_span = duration_cast<duration<double>>(t2 - t1);
-    cout << "YOLOv3 took " << time_span.count() << " seconds." << endl;
+    duration<double> timeSpan = duration_cast<duration<double>>(t2 - t1);
+    cout << "YOLOv3 took " << timeSpan.count() << " seconds." << endl;
 
     auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
@@ -811,6 +811,7 @@ void LocalMapping::FindLandmarks()
         projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
     }
 
+    t1 = high_resolution_clock::now();
     for (auto& object : objects2D) {
         // Ignore the bounding box that goes outside the frame.
         if (object.bbox.x < 0 || object.bbox.y < 0
@@ -855,6 +856,7 @@ void LocalMapping::FindLandmarks()
         // Represent the proposal with the coordinates in frame of the 8 corners.
         Point2f proposalCorners[8];
         Point2f bestProposalCorners[8];
+        Mat bestRlw, bestInvRlw;
         float bestErr = -1;
         bool isCornerVisible[8] = {true, true, true, true};
         // Sample corner on the top boundary.
@@ -1001,53 +1003,13 @@ void LocalMapping::FindLandmarks()
                                 ++imgIdx;
                             }
                         }
-                        // TODO: Score the proposal.
-                        float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
-                        // Distance error.
-                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
-                        distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
-                        if (isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]), segsInBbox);
-                        if (isCornerVisible[6])
-                            distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
-                        if (isCornerVisible[5])
-                            distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
-                        if (isCornerVisible[4])
-                            distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
-                        if (isCornerVisible[4] && isCornerVisible[5])
-                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
-                        if (isCornerVisible[4] && isCornerVisible[6])
-                            distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
-                        if (isCornerVisible[5] && isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]), segsInBbox);
-                        if (isCornerVisible[6] && isCornerVisible[7])
-                            distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]), segsInBbox);
-                        // Angle alignment error.
-                        for (const auto& seg : segsInBbox) {
-                            float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
-                            float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
-                            float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
-                            alignErr += min(min(err1, err2), err3);
-                        }
-                        // Shape error.
-                        float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
-                                            + Distance(proposalCorners[2], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[5])
-                                            + Distance(proposalCorners[6], proposalCorners[7]);
-                        float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
-                                            + Distance(proposalCorners[1], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[6])
-                                            + Distance(proposalCorners[5], proposalCorners[7]);
-                        shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 / edgeLenSum1;
-                        shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
-                        // Sum the errors by weight.
-                        totalErr = distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
 
                         // Pick the proposal with the highest score.
-                        if (totalErr < bestErr || bestErr == -1) {
-                            bestErr = totalErr;
+                        float err = ProposalError(proposalCorners, isCornerVisible, segsInBbox, vp1, vp2, vp3);
+                        if (err < bestErr || bestErr == -1) {
+                            bestErr = err;
+                            bestRlw = Rlw;
+                            bestInvRlw = invRlw;
                             memcpy(bestProposalCorners, proposalCorners, sizeof(proposalCorners));
                         }
                     }
@@ -1055,15 +1017,84 @@ void LocalMapping::FindLandmarks()
             }
         }
 
-        // TODO: Reason the depth of the landmark from the best proposal.
+        // TODO: Reason the pose and dimension of the landmark from the best proposal.
+        // First approximate the centroid of the landmark to be the average of the map points that fall in the bounding box.
+        auto mapPoints = mpCurrentKeyFrame->GetMapPointMatches();
+        vector<MapPoint*> includedMapPoints;
+        includedMapPoints.reserve(mapPoints.size());
+        for (auto mapPoint : mpCurrentKeyFrame->GetMapPoints()) {
+            auto pt = mpCurrentKeyFrame->mvKeysUn[mapPoint->GetObservations()[mpCurrentKeyFrame]].pt;
+            if (pt.inside(object.bbox)) {
+                includedMapPoints.emplace_back(mapPoint);
+            }
+        }
+        Mat worldPos;
+        for (auto mapPoint : includedMapPoints) {
+            worldPos += mapPoint->GetWorldPos();
+        }
+        worldPos /= includedMapPoints.size();
+        Mat camCoordPos = mpCurrentKeyFrame->GetPose() * worldPos;
 
-        // TODO: Store the pose correspondong to best proposal into the keyframe.
+
+        // TODO: Store the pose corresponding to best proposal into the keyframe.
 
         // TODO: Visualize the best 2D proposal.
     }
+    t2 = high_resolution_clock::now();
+    timeSpan = duration_cast<duration<double>>(t2 - t1);
+    cout << "Finding landmarks took " << timeSpan.count() << " seconds." << endl;
 
     // Visualize intermediate results used for finding landmarks.
     mpFrameDrawer->UpdateKeyframe(mpCurrentKeyFrame, objects2D);
+}
+
+float LocalMapping::ProposalError(const Point2f proposalCorners[],
+                                  const bool isCornerVisible[],
+                                  const vector<LineSegment>& segsInBbox,
+                                  const Mat& vp1, const Mat& vp2, const Mat& vp3)
+{
+    float distErr = 0, alignErr = 0, shapeErr = 0;
+    // Distance error.
+    distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
+    distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
+    distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
+    distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
+    if (isCornerVisible[7])
+        distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]), segsInBbox);
+    if (isCornerVisible[6])
+        distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
+    if (isCornerVisible[5])
+        distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
+    if (isCornerVisible[4])
+        distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
+    if (isCornerVisible[4] && isCornerVisible[5])
+        distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
+    if (isCornerVisible[4] && isCornerVisible[6])
+        distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
+    if (isCornerVisible[5] && isCornerVisible[7])
+        distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]), segsInBbox);
+    if (isCornerVisible[6] && isCornerVisible[7])
+        distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]), segsInBbox);
+    // Angle alignment error.
+    for (const auto& seg : segsInBbox) {
+        float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
+        float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
+        float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
+        alignErr += min(min(err1, err2), err3);
+    }
+    // Shape error.
+    float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
+                        + Distance(proposalCorners[2], proposalCorners[3])
+                        + Distance(proposalCorners[4], proposalCorners[5])
+                        + Distance(proposalCorners[6], proposalCorners[7]);
+    float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
+                        + Distance(proposalCorners[1], proposalCorners[3])
+                        + Distance(proposalCorners[4], proposalCorners[6])
+                        + Distance(proposalCorners[5], proposalCorners[7]);
+    shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 / edgeLenSum1;
+    shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
+    // Sum the errors by weight.
+    return distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
 }
 
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw)

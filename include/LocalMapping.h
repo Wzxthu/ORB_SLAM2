@@ -77,6 +77,12 @@ public:
     }
 
 protected:
+    float ProposalError(const cv::Point2f proposalCorners[],
+                        const bool isCornerVisible[],
+                        const std::vector<LineSegment>& segsInBbox,
+                        const cv::Mat& vp1, const cv::Mat& vp2, const cv::Mat& vp3);
+
+protected:
 
     bool CheckNewKeyFrames();
     void ProcessNewKeyFrame();

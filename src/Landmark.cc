@@ -22,6 +22,7 @@
 #include <mutex>
 
 using namespace std;
+using namespace cv;
 
 namespace ORB_SLAM2 {
 
@@ -35,53 +36,53 @@ LandmarkDimension Landmark::GetDimension() {
     return mDimension;
 }
 
-void Landmark::SetPose(const cv::Mat& Tlw_)
+void Landmark::SetPose(const Mat& Tlw_)
 {
     unique_lock<mutex> lock(mMutexPose);
     Tlw_.copyTo(Tlw);
-    cv::Mat Rlw = Tlw.rowRange(0, 3).colRange(0, 3);
-    cv::Mat tlw = Tlw.rowRange(0, 3).col(3);
-    cv::Mat Rwl = Rlw.t();
+    Mat Rlw = Tlw.rowRange(0, 3).colRange(0, 3);
+    Mat tlw = Tlw.rowRange(0, 3).col(3);
+    Mat Rwl = Rlw.t();
     Lw = -Rwl*tlw;
 
-    Twl = cv::Mat::eye(4, 4, Tlw.type());
+    Twl = Mat::eye(4, 4, Tlw.type());
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
-cv::Point Landmark::GetProjectedCenter(const cv::Mat& Tcw)
+Point Landmark::GetProjectedCenter(const Mat& Tcw)
 {
-    cv::Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
-    return cv::Point(
+    Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
+    return Point(
             static_cast<int>(homo.at<float>(0) / homo.at<float>(2)),
             static_cast<int>(homo.at<float>(1) / homo.at<float>(2)));
 }
 
-cv::Mat Landmark::GetPose()
+Mat Landmark::GetPose()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Tlw.clone();
 }
 
-cv::Mat Landmark::GetPoseInverse()
+Mat Landmark::GetPoseInverse()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Twl.clone();
 }
 
-cv::Mat Landmark::GetLandmarkCenter()
+Mat Landmark::GetLandmarkCenter()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Lw.clone();
 }
 
-cv::Mat Landmark::GetRotation()
+Mat Landmark::GetRotation()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Tlw.rowRange(0,3).colRange(0,3).clone();
 }
 
-cv::Mat Landmark::GetTranslation()
+Mat Landmark::GetTranslation()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Tlw.rowRange(0,3).col(3).clone();
