@@ -39,11 +39,11 @@ using namespace cv;
 
 namespace ORB_SLAM2 {
 
-static float Distance(const Point& pt, const LineSegment& edge);
+static float Distance(const Point2f& pt, const LineSegment& edge);
 static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2f& C, const Point2f& D);
-static float ChamferDistance(const LineSegment& hypothesisEdge,
-                             const vector<LineSegment>& actualEdges,
-                             int numSamples = 10);
+static float ChamferDist(const LineSegment& hypothesisEdge,
+        const vector<LineSegment>& actualEdges,
+        int numSamples = 10);
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
 static float AlignmentError(const Point2f& pt, const LineSegment& edge);
@@ -68,6 +68,9 @@ LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular
         mbAcceptKeyFrames(true), mAlignErrWeight(alignErrWeight), mShapeErrWeight(shapeErrWeight),
         mShapeErrThresh(shapeErrThresh)
 {
+    if (mkdir("Outputs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH) != -1) {
+        std::cout << "Success!" << endl;
+    }
 }
 
 void LocalMapping::SetLoopCloser(LoopClosing* pLoopCloser)
@@ -813,6 +816,7 @@ void LocalMapping::FindLandmarks()
         projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
     }
 
+    Mat canvas = mpCurrentKeyFrame->mImColor.clone();
     for (auto& object : objects2D) {
         // Ignore the bounding box that goes outside the frame.
         if (object.bbox.x < 0 || object.bbox.y < 0
@@ -854,14 +858,15 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
-        Point2f proposalCorners[8];
-        Point2f bestProposalCorners[8];
-        float bestErr = -1;
+        vector<Point2f> proposalCorners(8);
+        vector<float> distErrs, alignErrs, shapeErrs;
+        vector<vector<Point2f>> candidates;
         bool isCornerVisible[8] = {true, true, true, true};
+        int step = round(object.bbox.width / 10.0);
+        int resolution = min(20, step);
         // Sample corner on the top boundary.
-        for (int i = 0; i < 10; ++i) {
-            proposalCorners[0] = Point2f(object.bbox.x + object.bbox.width * i / 9.f,
-                                         object.bbox.y + object.bbox.height);
+        for (float sampleX = object.bbox.x + 5; sampleX < object.bbox.x + object.bbox.width - 5; sampleX += resolution) {
+            proposalCorners[0] = Point2f(sampleX, object.bbox.y);
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = yaw_init - 45.0 / 180 * M_PI;
                  l_yaw < yaw_init + 45.0 / 180 * M_PI;
@@ -891,202 +896,265 @@ void LocalMapping::FindLandmarks()
                         Point vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0),
                                        vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
                         // TODO: Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        if (vp1_homo.inside(object.bbox) || vp2_homo.inside(object.bbox) ||
-                            vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
+                        if (vp3_homo.x < object.bbox.x || vp3_homo.x > object.bbox.x + object.bbox.width ||
                             vp3_homo.y < object.bbox.y + object.bbox.height ||
                             vp1_homo.y > object.bbox.y || vp2_homo.y > object.bbox.y) {
                             continue;
                         }
-                        else {
-                            proposalCorners[0] = Point(object.bbox.x + object.bbox.width * i / 9, object.bbox.y);
-                            if ((vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x + object.bbox.width) ||
-                                (vp1_homo.x > object.bbox.x + object.bbox.width && vp2_homo.x < object.bbox.x)) {
-                                if (vp1_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x) {
-                                    swap(vp1_homo, vp2_homo);
-                                }
-                                // 3 faces
-                                proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
-                                proposalCorners[2] = LineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
-                                proposalCorners[3] = LineIntersection(vp1_homo, proposalCorners[2], vp2_homo,
-                                                                      proposalCorners[1]);
-                                proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                                proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
-                                                                      proposalCorners[2]);
-                                proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
-                                                                      proposalCorners[1]);
-                                proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
-                                                                      proposalCorners[5]);
-                                isCornerVisible[4] = true;
-                                isCornerVisible[5] = true;
-                                isCornerVisible[6] = true;
-                                isCornerVisible[7] = false;
+                        else if ((vp1_homo.x < object.bbox.x && vp2_homo.x > object.bbox.x + object.bbox.width) ||
+                                 (vp1_homo.x > object.bbox.x + object.bbox.width && vp2_homo.x < object.bbox.x)) {
+                            if (vp1_homo.x > object.bbox.x + object.bbox.width && vp2_homo.x < object.bbox.x) {
+                                swap(vp1_homo, vp2_homo);
                             }
-                            else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
-                                     (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
-                                if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
-                                    swap(vp1_homo, vp2_homo);
+                            // 3 faces
+                            proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
+                            if (!proposalCorners[1].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[2] = LineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
+                            if (!proposalCorners[2].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[3] = LineIntersection(vp1_homo, proposalCorners[2], vp2_homo,
+                                                                  proposalCorners[1]);
+                            if (!proposalCorners[3].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
+                            if (!proposalCorners[4].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                  proposalCorners[2]);
+                            if (!proposalCorners[5].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                  proposalCorners[1]);
+                            if (!proposalCorners[6].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                  proposalCorners[5]);
+                            if (!proposalCorners[7].inside(object.bbox)) {
+                                continue;
+                            }
+                            isCornerVisible[4] = true;
+                            isCornerVisible[5] = true;
+                            isCornerVisible[6] = true;
+                            isCornerVisible[7] = false;
+                        } else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
+                                   (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
+                            if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
+                                swap(vp1_homo, vp2_homo);
+                            }
+                            if (vp2_homo.x < object.bbox.x) {
+                                // 2 faces
+                                proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topLeft,
+                                                                      botLeft);
+                                if (!proposalCorners[1].inside(object.bbox)) {
+                                    continue;
                                 }
-                                if (vp2_homo.x < object.bbox.x) {
-                                    // 2 faces
-                                    proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topLeft,
-                                                                          botLeft);
-                                    proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topRight,
-                                                                          botRight);
-                                    proposalCorners[2] = LineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
-                                                                          proposalCorners[0]);
-                                    proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft,
-                                                                          botRight);
-                                    proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
-                                                                          proposalCorners[2]);
-                                    proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
-                                                                          proposalCorners[1]);
-                                    proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
-                                                                          proposalCorners[5]);
-                                    isCornerVisible[4] = true;
-                                    isCornerVisible[5] = false;
-                                    isCornerVisible[6] = true;
-                                    isCornerVisible[7] = false;
+                                proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topRight,
+                                                                      botRight);
+                            } else if (vp2_homo.x > object.bbox.x + object.bbox.width){
+                                // 2 faces
+                                proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight,
+                                                                      botRight);
+                                if (!proposalCorners[1].inside(object.bbox)) {
+                                    continue;
                                 }
-                                else {
-                                    // 2 faces
-                                    proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight,
-                                                                          botRight);
-                                    proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topLeft,
-                                                                          botLeft);
-                                    proposalCorners[2] = LineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
-                                                                          proposalCorners[0]);
-                                    proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft,
-                                                                          botRight);
-                                    proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
-                                                                          proposalCorners[2]);
-                                    proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
-                                                                          proposalCorners[1]);
-                                    proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
-                                                                          proposalCorners[5]);
-                                    isCornerVisible[4] = true;
-                                    isCornerVisible[5] = false;
-                                    isCornerVisible[6] = true;
-                                    isCornerVisible[7] = false;
+                                proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topLeft,
+                                                                      botLeft);
+                                if (!proposalCorners[3].inside(object.bbox)) {
+                                    continue;
                                 }
                             }
                             else {
                                 continue;
                             }
-                            if (imgIdx%20 == 0) {
-                                // draw bbox
-                                Mat image;
-                                mpCurrentKeyFrame->mImColor.copyTo(image);
-                                rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
-                                // draw cube
-                                line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                                line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                                if (mkdir("Outputs", '0777') != -1) {
-                                    std::cout << "Success!" << endl;
-                                }
-                                imwrite("Outputs/" + to_string(imgIdx) + ".jpg", image);
-                                ++imgIdx;
+                            proposalCorners[2] = LineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
+                                                                  proposalCorners[0]);
+                            if (!proposalCorners[2].inside(object.bbox)) {
+                                continue;
                             }
-                            {
-                                // TODO: Score the proposal.
-                                float totalErr = 0, distErr = 0, alignErr = 0, shapeErr = 0;
-                                // Distance error.
-                                distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[1]),
-                                                           segsInBbox);
-                                distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[2]),
-                                                           segsInBbox);
-                                distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[3]),
-                                                           segsInBbox);
-                                distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[3]),
-                                                           segsInBbox);
-                                if (isCornerVisible[7])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[0], proposalCorners[7]),
-                                                               segsInBbox);
-                                if (isCornerVisible[6])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[1], proposalCorners[6]),
-                                                               segsInBbox);
-                                if (isCornerVisible[5])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[2], proposalCorners[5]),
-                                                               segsInBbox);
-                                if (isCornerVisible[4])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[3], proposalCorners[4]),
-                                                               segsInBbox);
-                                if (isCornerVisible[4] && isCornerVisible[5])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[5]),
-                                                               segsInBbox);
-                                if (isCornerVisible[4] && isCornerVisible[6])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[4], proposalCorners[6]),
-                                                               segsInBbox);
-                                if (isCornerVisible[5] && isCornerVisible[7])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[5], proposalCorners[7]),
-                                                               segsInBbox);
-                                if (isCornerVisible[6] && isCornerVisible[7])
-                                    distErr += ChamferDistance(make_pair(proposalCorners[6], proposalCorners[7]),
-                                                               segsInBbox);
-                                // Angle alignment error.
-                                for (const auto &seg : segsInBbox) {
-                                    float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
-                                    float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
-                                    float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
-                                    alignErr += min(min(err1, err2), err3);
-                                }
-                                // Shape error.
-                                float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
-                                                    + Distance(proposalCorners[2], proposalCorners[3])
-                                                    + Distance(proposalCorners[4], proposalCorners[5])
-                                                    + Distance(proposalCorners[6], proposalCorners[7]);
-                                float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
-                                                    + Distance(proposalCorners[1], proposalCorners[3])
-                                                    + Distance(proposalCorners[4], proposalCorners[6])
-                                                    + Distance(proposalCorners[5], proposalCorners[7]);
-                                shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 /
-                                                                                                   edgeLenSum1;
-                                shapeErr = max(shapeErr - mShapeErrThresh, 0.f);
-                                // Sum the errors by weight.
-                                totalErr = distErr + mAlignErrWeight * alignErr + mShapeErrWeight * shapeErr;
+                            proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft,
+                                                                  botRight);
+                            if (!proposalCorners[4].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
+                                                                  proposalCorners[2]);
+                            if (!proposalCorners[5].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
+                                                                  proposalCorners[1]);
+                            if (!proposalCorners[6].inside(object.bbox)) {
+                                continue;
+                            }
+                            proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
+                                                                  proposalCorners[5]);
+                            if (!proposalCorners[7].inside(object.bbox)) {
+                                continue;
+                            }
+                            isCornerVisible[4] = true;
+                            isCornerVisible[5] = false;
+                            isCornerVisible[6] = true;
+                            isCornerVisible[7] = false;
+                        } else {
+                            continue;
+                        }
 
-                                // Pick the proposal with the highest score.
-                                if (totalErr < bestErr || bestErr == -1) {
-                                    bestErr = totalErr;
-                                    memcpy(bestProposalCorners, proposalCorners, sizeof(proposalCorners));
-                                }
+                        // TODO: Score the proposal.
+                        float distErr = 0, alignErr = 0, shapeErr = 0;
+
+                        // Distance error
+                        float weight_sum = 0;
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
+                        distErr += 2 / ChamferDist(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
+                        distErr += 2 / ChamferDist(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
+                        weight_sum += 11.5;
+                        if (isCornerVisible[5]) {
+                            distErr += 2 / ChamferDist(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
+                            distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
+                            weight_sum += 3.5;
+                        }
+                        distErr = weight_sum / distErr;
+
+                        // Angle alignment error.
+                        float err_sum[3] = {};
+                        int err_cnt[3] = {};
+                        for (const auto &seg : segsInBbox) {
+                            float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
+                            float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
+                            float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
+
+                            float minErr = err3;
+                            int minErrIdx = 2;
+
+                            if (err1 < 10.0 / 180 * M_PI && err1 < minErr) {
+                                minErr = err1;
+                                minErrIdx = 0;
+                            }
+
+                            if (err2 < 10.0 / 180 * M_PI && err2 < minErr) {
+                                minErr = err2;
+                                minErrIdx = 1;
+                            }
+
+                            if (minErr < 15.0 / 180 * M_PI) {
+                                err_sum[minErrIdx] += minErr;
+                                ++err_cnt[minErrIdx];
                             }
                         }
+                        alignErr = 0;
+                        for (int i = 0; i < 3; ++i) {
+                            if (err_cnt[i])
+                                alignErr += err_sum[i] / err_cnt[i];
+                            else
+                                alignErr += M_PI_2;
+                        }
+                        alignErr /= 3;
+
+                        // Shape error.
+                        float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
+                                            + Distance(proposalCorners[2], proposalCorners[3])
+                                            + Distance(proposalCorners[4], proposalCorners[5])
+                                            + Distance(proposalCorners[6], proposalCorners[7]);
+                        float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
+                                            + Distance(proposalCorners[1], proposalCorners[3])
+                                            + Distance(proposalCorners[4], proposalCorners[6])
+                                            + Distance(proposalCorners[5], proposalCorners[7]);
+                        if (edgeLenSum1 / 4 < 20 || edgeLenSum2 / 4 < 20) {
+                            continue;
+                        }
+                        shapeErr = edgeLenSum1 > edgeLenSum2 ? edgeLenSum1 / edgeLenSum2 : edgeLenSum2 /
+                                                                                           edgeLenSum1;
+                        shapeErr = max(shapeErr - mShapeErrThresh, 0.f) * 100;
+
+                        distErrs.push_back(distErr);
+                        alignErrs.push_back(alignErr);
+                        shapeErrs.push_back(shapeErr);
+                        candidates.push_back(proposalCorners);
+
+                        if (imgIdx % 5 == 0) {
+                            // draw bbox
+                            Mat image;
+                            mpCurrentKeyFrame->mImColor.copyTo(image);
+                            rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+                            // draw cube
+                            line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+
+                            for (auto& seg : segsInBbox) {
+                                line(image, seg.first, seg.second, Scalar(0, 0, 255), 1, CV_AA);
+                            }
+
+                            std::cout << distErr << ' ' << alignErr << ' ' << shapeErr << std::endl;
+                            imwrite("Outputs/" + std::to_string(imgIdx) + ".jpg", image);
+                        }
+                        ++imgIdx;
                     }
                 }
             }
         }
+
+        const int numErr = distErrs.size();
+        if (!numErr)
+            continue;
+
+        const float minDistErr = *min_element(distErrs.begin(), distErrs.end());
+        const float minAlignErr = *min_element(alignErrs.begin(), alignErrs.end());
+        const float maxDistErr = *max_element(distErrs.begin(), distErrs.end());
+        const float maxAlignErr = *max_element(alignErrs.begin(), alignErrs.end());
+        float bestErr = -1;
+        int bestProposal = -1;
+
+        for (int i = 0; i < numErr; ++i) {
+            // Sum the errors by weight.
+            float normDistErr = (distErrs[i] - minDistErr) / (maxDistErr - minDistErr);
+            float normAlignErr = (alignErrs[i] - minAlignErr) / (maxAlignErr - minAlignErr);
+            float totalErr = (normDistErr + mAlignErrWeight * normAlignErr) / (1 + mAlignErrWeight) + mShapeErrWeight * shapeErrs[i];
+            if (totalErr < bestErr || bestErr == -1) {
+                bestErr = totalErr;
+                bestProposal = i;
+                std::cout << normDistErr << ' ' << normAlignErr << ' ' << shapeErrs[i] << ' ' << distErrs[i] << ' ' << alignErrs[i] << std::endl;
+            }
+        }
+        vector<Point2f> bestProposalCorners = candidates[bestProposal];
+
         {
             // draw bbox
-            Mat image;
-            mpCurrentKeyFrame->mImColor.copyTo(image);
-            rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
+            rectangle(canvas, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
             // draw cube
-            line(image, bestProposalCorners[0], bestProposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[1], bestProposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[3], bestProposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[2], bestProposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[0], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[1], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[2], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[3], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[7], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[6], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[4], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(image, bestProposalCorners[5], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-            if (mkdir("Outputs", '0777') != -1) {
-                std::cout << "Success!" << endl;
-            }
-            imwrite("Outputs/best.jpg", image);
+            line(canvas, bestProposalCorners[0], bestProposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[1], bestProposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[3], bestProposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[2], bestProposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[0], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[1], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[2], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[3], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[7], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[6], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[4], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposalCorners[5], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+            cout << "bestErr: " << bestErr << endl;
         }
 
         // TODO: Reason the depth of the landmark from the best proposal.
@@ -1095,6 +1163,8 @@ void LocalMapping::FindLandmarks()
 
         // TODO: Visualize the best 2D proposal.
     }
+
+    imwrite("Outputs/" + std::to_string(mpCurrentKeyFrame->mnId) + "_best.jpg", canvas);
 
     // Visualize intermediate results used for finding landmarks.
     mpFrameDrawer->UpdateKeyframe(mpCurrentKeyFrame, objects2D);
@@ -1122,18 +1192,18 @@ static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
     return rot;
 }
 
-static float Distance(const Point& pt, const LineSegment& edge)
+static float Distance(const Point2f& pt, const LineSegment& edge)
 {
-    Vec2i v1(edge.first.x - pt.x, edge.first.y - pt.y);
-    Vec2i v2(edge.second.x - pt.x, edge.second.y - pt.y);
-    Vec2i v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
+    Vec2f v1(edge.first.x - pt.x, edge.first.y - pt.y);
+    Vec2f v2(edge.second.x - pt.x, edge.second.y - pt.y);
+    Vec2f v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
     auto l1sq = DistanceSquare(edge.first, pt);
     auto l2sq = DistanceSquare(edge.second, pt);
     auto l3sq = DistanceSquare(edge.first, edge.second);
     if (l1sq + l3sq < l2sq)
-        return sqrtf(l2sq);
-    else if (l2sq + l3sq < l1sq)
         return sqrtf(l1sq);
+    else if (l2sq + l3sq < l1sq)
+        return sqrtf(l2sq);
     else {
         // The pedal falls on the edge.
         float l1 = sqrtf(l1sq);
@@ -1173,14 +1243,14 @@ static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2
     }
 }
 
-static float ChamferDistance(const LineSegment& hypothesis,
-                             const vector<LineSegment>& actualEdges,
-                             int numSamples)
+static float ChamferDist(const LineSegment &hypothesis,
+                         const vector<LineSegment> &actualEdges,
+                         int numSamples)
 {
-    int dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
-    int dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
-    int x = hypothesis.first.x;
-    int y = hypothesis.first.y;
+    float dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
+    float dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
+    float x = hypothesis.first.x;
+    float y = hypothesis.first.y;
     float chamferDist = 0;
     for (int i = 0; i < numSamples; ++i) {
         Point pt(x, y);
@@ -1196,7 +1266,7 @@ static float ChamferDistance(const LineSegment& hypothesis,
         x += dx;
         y += dy;
     }
-    return 0;
+    return chamferDist;
 }
 
 static float AlignmentError(const Point2f& pt, const LineSegment& edge)
