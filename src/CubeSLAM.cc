@@ -28,10 +28,10 @@ CuboidProposal FindBestProposal(Rect bbox, float c_yaw, float c_roll, float c_pi
     const auto yaw_step = static_cast<const float>(6.f / 180 * M_PI);
     const auto roll_start = c_roll - static_cast<const float>(M_PI_2 / 6);
     const auto roll_end = c_roll + static_cast<const float>(M_PI_2 / 6);
-    const auto roll_step = static_cast<const float>(6.f / 180 * M_PI);
+    const auto roll_step = static_cast<const float>(3.f / 180 * M_PI);
     const auto pitch_start = c_pitch - static_cast<const float>(M_PI_2 / 6);
     const auto pitch_end = c_pitch + static_cast<const float>(M_PI_2 / 6);
-    const auto pitch_step = static_cast<const float>(6.f / 180 * M_PI);
+    const auto pitch_step = static_cast<const float>(3.f / 180 * M_PI);
     int imgIdx = 0;
     // Sample corner on the top boundary.
     for (int topX = bbox.x + (topXStep >> 1); topX < bbox.x + bbox.width - (topXStep >> 1); topX += topXStep) {
@@ -166,18 +166,18 @@ CuboidProposal FindBestProposal(Rect bbox, float c_yaw, float c_roll, float c_pi
 
                     // Distance error
                     float weight_sum = 0;
-                    distErr += 1.5 / ChamferDist(make_pair(proposal[0], proposal[1]), lineSegs);
-                    distErr += 1.5 / ChamferDist(make_pair(proposal[0], proposal[2]), lineSegs);
-                    distErr += 1.5 / ChamferDist(make_pair(proposal[1], proposal[3]), lineSegs);
-                    distErr += 1.5 / ChamferDist(make_pair(proposal[2], proposal[3]), lineSegs);
-                    distErr += 2 / ChamferDist(make_pair(proposal[1], proposal[6]), lineSegs);
-                    distErr += 2 / ChamferDist(make_pair(proposal[3], proposal[4]), lineSegs);
-                    distErr += 1.5 / ChamferDist(make_pair(proposal[4], proposal[6]), lineSegs);
-                    weight_sum += 11.5;
+                    distErr += 1.5f / ChamferDist(make_pair(proposal[0], proposal[1]), lineSegs);
+                    distErr += 1.5f / ChamferDist(make_pair(proposal[0], proposal[2]), lineSegs);
+                    distErr += 1.5f / ChamferDist(make_pair(proposal[1], proposal[3]), lineSegs);
+                    distErr += 1.5f / ChamferDist(make_pair(proposal[2], proposal[3]), lineSegs);
+                    distErr += 2.f / ChamferDist(make_pair(proposal[1], proposal[6]), lineSegs);
+                    distErr += 2.f / ChamferDist(make_pair(proposal[3], proposal[4]), lineSegs);
+                    distErr += 1.5f / ChamferDist(make_pair(proposal[4], proposal[6]), lineSegs);
+                    weight_sum += 11.5f;
                     if (isCornerVisible[5]) {
-                        distErr += 2 / ChamferDist(make_pair(proposal[2], proposal[5]), lineSegs);
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[4], proposal[5]), lineSegs);
-                        weight_sum += 3.5;
+                        distErr += 2.f / ChamferDist(make_pair(proposal[2], proposal[5]), lineSegs);
+                        distErr += 1.5f / ChamferDist(make_pair(proposal[4], proposal[5]), lineSegs);
+                        weight_sum += 3.5f;
                     }
                     distErr = weight_sum / distErr;
 
@@ -192,17 +192,17 @@ CuboidProposal FindBestProposal(Rect bbox, float c_yaw, float c_roll, float c_pi
                         float minErr = err3;
                         int minErrIdx = 2;
 
-                        if (err1 < 10.0 / 180 * M_PI && err1 < minErr) {
+                        if (err1 < 10.f / 180 * M_PI && err1 < minErr) {
                             minErr = err1;
                             minErrIdx = 0;
                         }
 
-                        if (err2 < 10.0 / 180 * M_PI && err2 < minErr) {
+                        if (err2 < 10.f / 180 * M_PI && err2 < minErr) {
                             minErr = err2;
                             minErrIdx = 1;
                         }
 
-                        if (minErr < 15.0 / 180 * M_PI) {
+                        if (minErr < 15.f / 180 * M_PI) {
                             err_sum[minErrIdx] += minErr;
                             ++err_cnt[minErrIdx];
                         }
@@ -261,8 +261,7 @@ CuboidProposal FindBestProposal(Rect bbox, float c_yaw, float c_roll, float c_pi
 
                         cout << "Errors of Proposal " << imgIdx << " in Frame " << frameId
                              << ": " << distErr << ' ' << alignErr << ' ' << shapeErr << endl;
-                        imwrite("Outputs/" + to_string(frameId) + "_" + to_string(imgIdx)
-                                + ".jpg", image);
+                        imwrite("Outputs/" + to_string(frameId) + "_" + to_string(imgIdx) + ".jpg", image);
                     }
                     ++imgIdx;
                 }
@@ -274,7 +273,7 @@ CuboidProposal FindBestProposal(Rect bbox, float c_yaw, float c_roll, float c_pi
 
     const int numErr = static_cast<const int>(distErrs.size());
     if (!numErr)
-        return CuboidProposal();
+        return {};  // Return an empty cuboid proposal.
 
     const float minDistErr = *min_element(distErrs.begin(), distErrs.end());
     const float minAlignErr = *min_element(alignErrs.begin(), alignErrs.end());

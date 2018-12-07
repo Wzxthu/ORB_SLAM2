@@ -1,6 +1,8 @@
 #include "CubeSLAM.h"
 #include "ObjectDetector.h"
 
+#include <fstream>
+
 using namespace std;
 using namespace cv;
 using namespace ORB_SLAM2;
@@ -10,6 +12,13 @@ int main()
     string testImgPaths[] {
             "data/cubeslam_test_example_0.jpg",
             "data/cubeslam_test_example_1.jpg",
+            "data/cubeslam_test_example_2.png",
+    };
+
+    string testInfoPaths[] {
+            "data/cubeslam_test_example_0_info.txt",
+            "data/cubeslam_test_example_1_info.txt",
+            "data/cubeslam_test_example_2_info.txt",
     };
 
     const float alignErrWeight = 0.7, shapeErrWeight = 2.5, shapeErrThresh = 2.f;
@@ -30,15 +39,17 @@ int main()
         auto lineSegs = lineSegDetector->Detect(imGray);
 
         for (auto& seg: lineSegs) {
-            line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 2);
+            line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 1);
         }
 
         // TODO: Load camera roll, pitch, yaw and intrinsics for different test images.
-        const float c_roll = -1.9151f, c_pitch = -0.0011f, c_yaw = 0;
-        Mat K = (Mat_<float>(3, 3, CV_32F)
-                << 529.5000, 0, 365.0000,
-                0, 529.5000, 265.0000,
-                0, 0, 1.0000);
+        float c_roll, c_pitch, c_yaw;
+        Mat K(3, 3, CV_32F);
+        ifstream fin(testInfoPaths[i]);
+        for (int r = 0; r < 3; ++r)
+            for (int c = 0; c < 3; ++c)
+                fin >> K.at<float>(r, c);
+        fin >> c_roll >> c_pitch >> c_yaw;
 
         for (auto& object : objects2D) {
             auto& bbox = object.bbox;
@@ -74,22 +85,22 @@ int main()
                 continue;
             {
                 // Draw cuboid proposal
-                line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
-                line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
+                line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
+                line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
             }
         }
 
-        imshow("Outputs/test_" + to_string(i) + ".jpg", canvas);
+        imshow("test_" + to_string(i), canvas);
         waitKey(0);
     }
 

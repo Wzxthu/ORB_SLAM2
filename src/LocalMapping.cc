@@ -797,7 +797,7 @@ void LocalMapping::FindLandmarks()
     for (auto& object : objects2D) {
         auto& bbox = object.bbox;
         // draw bbox
-        rectangle(canvas, bbox, Scalar(255, 0, 0), 1, CV_AA);
+        rectangle(canvas, bbox, Scalar(255, 0, 0), 2, CV_AA);
 
         // Ignore the bounding box that goes outside the frame.
         if (bbox.x < 0 || bbox.y < 0
@@ -843,18 +843,18 @@ void LocalMapping::FindLandmarks()
             continue;
         {
             // Draw cuboid proposal
-            line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
         }
 
         // Reason the pose and dimension of the landmark from the best proposal.

@@ -61,7 +61,6 @@ private:
 
 private:
     cv::dnn::Net mNet;
-    cv::Mat mBlob;
     float mNmsThresh;
     float mConfThresh;
 
