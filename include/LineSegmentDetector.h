@@ -26,7 +26,7 @@
 
 namespace ORB_SLAM2 {
 
-typedef std::pair<cv::Point, cv::Point> LineSegment;
+typedef std::pair<cv::Point2f, cv::Point2f> LineSegment;
 
 class LineSegmentDetector {
 public:

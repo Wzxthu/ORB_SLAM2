@@ -98,7 +98,7 @@ void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
 
 //    inputWidth = inputHeight = 416;
 
-    cout << "Input Size: " << inputWidth << "x" << inputHeight << endl;
+//    cout << "Input Size: " << inputWidth << "x" << inputHeight << endl;
 
     // Create a 4D blob from the frame.
     blobFromImage(im, mBlob, 1 / 255.0, cvSize(inputWidth, inputHeight), Scalar(0, 0, 0), true, false);
@@ -145,7 +145,7 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, vector<
                 int left = centerX - width / 2;
                 int top = centerY - height / 2;
 
-                cout << "BBox size: " << height << ' ' << width << endl;
+//                cout << "BBox size: " << height << ' ' << width << endl;
 
                 classIds.push_back(classIdPoint.x);
                 confidences.push_back((float) confidence);
