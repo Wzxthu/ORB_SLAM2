@@ -60,15 +60,21 @@ private:
                      int inputWidth, int inputHeight);
 
 private:
+    std::string mCfgFile;;
+    std::string mWeightFile;
+
     cv::dnn::Net mNet;
     float mNmsThresh;
     float mConfThresh;
 
     float mInputArea;
 
-    static std::vector<std::string> mClasses;
+    int mInputWidth;
+    int mInputHeight;
 
     std::vector<cv::String> mOutputNames;
+
+    static std::vector<std::string> mClasses;
 };
 
 }

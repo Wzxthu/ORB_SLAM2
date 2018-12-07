@@ -39,8 +39,10 @@ ObjectDetector::ObjectDetector(
         float confThresh,
         float inputArea)
         :
+        mCfgFile(cfgFile), mWeightFile(weightFile),
         mNet(readNetFromDarknet(cfgFile, weightFile)),
-        mNmsThresh(nmsThresh), mConfThresh(confThresh), mInputArea(inputArea)
+        mNmsThresh(nmsThresh), mConfThresh(confThresh), mInputArea(inputArea),
+        mInputWidth(0), mInputHeight(0)
 {
     ocl::Context context = ocl::Context::getDefault(true);
 
@@ -143,6 +145,17 @@ void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
     float resizeRatio = sqrtf(mInputArea / (im.cols * im.rows));
     int inputWidth = static_cast<int>(ceil(im.cols * resizeRatio / 32)) << 5;
     int inputHeight = static_cast<int>(ceil(im.rows * resizeRatio / 32)) << 5;
+
+    if (mInputWidth) {
+        if (mInputWidth != inputWidth || mInputHeight != inputHeight) {
+            cerr << "WARNING: Image input to the network changes."
+                    " Due to the current implementation of OpenCV, the network needs reinitializing." << endl;
+            mNet = readNetFromDarknet(mCfgFile, mWeightFile);
+        }
+    } else {
+        mInputWidth = inputWidth;
+        mInputHeight = inputHeight;
+    }
 
     // Create a 4D blob from the frame.
     Mat blob = blobFromImage(im, 1 / 255.0, cvSize(inputWidth, inputHeight), Scalar(0, 0, 0), true, false);
