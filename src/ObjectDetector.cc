@@ -30,7 +30,7 @@ using namespace std;
 
 namespace ORB_SLAM2 {
 
-std::vector<std::string> ObjectDetector::mClasses = LoadClassNames();
+std::vector<std::string> ObjectDetector::mClasses;
 
 ObjectDetector::ObjectDetector(
         const char* cfgFile,
@@ -109,6 +109,9 @@ void ObjectDetector::DrawPred(int classId, float conf, int left, int top, int ri
 
     //Get the label for the class name and its confidence
     string label = format("%.2f", conf);
+    if (mClasses.empty()) {
+        LoadClassNames();
+    }
     if (!mClasses.empty()) {
         CV_Assert(classId < (int) mClasses.size());
         label = mClasses[classId] + ":" + label;
@@ -124,13 +127,13 @@ void ObjectDetector::DrawPred(int classId, float conf, int left, int top, int ri
 std::vector<std::string> ObjectDetector::LoadClassNames()
 {
     // Load names of classes
-    std::vector<std::string> classes;
     string classesFile = "Thirdparty/darknet/data/coco.names";
     ifstream ifs(classesFile.c_str());
     string line;
+    mClasses.clear();
     while (getline(ifs, line))
-        classes.push_back(line);
-    return classes;
+        mClasses.push_back(line);
+    return mClasses;
 }
 
 void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
