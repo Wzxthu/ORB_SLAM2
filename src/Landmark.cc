@@ -50,12 +50,10 @@ void Landmark::SetPose(const Mat& Tlw_)
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
-Point Landmark::GetProjectedCenter(const Mat& Tcw)
+Point2f Landmark::GetProjectedCenter(const Mat& Tcw)
 {
     Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
-    return Point(
-            static_cast<int>(homo.at<float>(0) / homo.at<float>(2)),
-            static_cast<int>(homo.at<float>(1) / homo.at<float>(2)));
+    return Point2f(homo.at<float>(0) / homo.at<float>(2), homo.at<float>(1) / homo.at<float>(2));
 }
 
 Mat Landmark::GetPose()
