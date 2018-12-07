@@ -48,6 +48,12 @@ public:
 
     void Detect(const cv::Mat& im, std::vector<Object>& objects);
 
+    static void DrawPred(const Object& obj, cv::Mat& frame);
+    static void DrawPred(int classId, float conf, cv::Rect bbox, cv::Mat& frame);
+    static void DrawPred(int classId, float conf, int left, int top, int right, int bottom, cv::Mat& frame);
+
+    static std::vector<std::string> LoadClassNames();
+
 private:
     // Remove the bounding boxes with low confidence using non-maxima suppression
     void Postprocess(const cv::Mat& im, const std::vector<cv::Mat>& outs, std::vector<Object>& objects,
@@ -60,6 +66,8 @@ private:
     float mConfThresh;
 
     float mInputArea;
+
+    static std::vector<std::string> mClasses;
 
     std::vector<cv::String> mOutputNames;
 };

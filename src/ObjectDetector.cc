@@ -30,6 +30,8 @@ using namespace std;
 
 namespace ORB_SLAM2 {
 
+std::vector<std::string> ObjectDetector::mClasses = LoadClassNames();
+
 ObjectDetector::ObjectDetector(
         const char* cfgFile,
         const char* weightFile,
@@ -87,6 +89,48 @@ ObjectDetector::ObjectDetector(
         mOutputNames[i] = layersNames[outLayers[i] - 1];
         cout << "\t" << mOutputNames[i] << endl;
     }
+}
+
+void ObjectDetector::DrawPred(const Object& obj, cv::Mat& frame)
+{
+    DrawPred(obj.classIdx, obj.conf, obj.bbox, frame);
+}
+
+void ObjectDetector::DrawPred(int classId, float conf, cv::Rect bbox, cv::Mat& frame)
+{
+    DrawPred(classId, conf, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height, frame);
+}
+
+// Draw the predicted bounding box
+void ObjectDetector::DrawPred(int classId, float conf, int left, int top, int right, int bottom, Mat& frame)
+{
+    //Draw a rectangle displaying the bounding box
+    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255));
+
+    //Get the label for the class name and its confidence
+    string label = format("%.2f", conf);
+    if (!mClasses.empty()) {
+        CV_Assert(classId < (int) mClasses.size());
+        label = mClasses[classId] + ":" + label;
+    }
+
+    //Display the label at the top of the bounding box
+    int baseLine;
+    Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+    top = max(top, labelSize.height);
+    putText(frame, label, Point(left, top), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
+}
+
+std::vector<std::string> ObjectDetector::LoadClassNames()
+{
+    // Load names of classes
+    std::vector<std::string> classes;
+    string classesFile = "Thirdparty/darknet/data/coco.names";
+    ifstream ifs(classesFile.c_str());
+    string line;
+    while (getline(ifs, line))
+        classes.push_back(line);
+    return classes;
 }
 
 void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)

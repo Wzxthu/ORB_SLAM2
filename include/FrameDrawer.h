@@ -59,8 +59,6 @@ public:
 
 protected:
 
-    void DrawPred(int classId, float conf, int left, int top, int right, int bottom, cv::Mat& frame);
-
     void DrawTextInfo(cv::Mat &im, int nState, cv::Mat &imText);
 
     // Info of the frame to be drawn
@@ -81,7 +79,6 @@ protected:
     // Info of the keyframe to be drawn.
     cv::Mat mKeyframeIm;
     std::vector<std::shared_ptr<Landmark>> mpLandmarks;
-    std::vector<std::string> mClasses;
 };
 
 } //namespace ORB_SLAM

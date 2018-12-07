@@ -22,6 +22,7 @@
 #include "LoopClosing.h"
 #include "ORBmatcher.h"
 #include "Optimizer.h"
+#include "CubeSLAM.h"
 #include <sys/stat.h>
 
 #include <mutex>
@@ -37,30 +38,6 @@ using namespace std;
 using namespace cv;
 
 namespace ORB_SLAM2 {
-
-// Represent the cuboid proposal with the coordinates in frame of the 8 corners.
-typedef array<Point2f, 8> CuboidProposal;
-
-static float Distance(const Point2f& pt, const LineSegment& edge);
-static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2f& C, const Point2f& D);
-static float ChamferDist(const LineSegment& hypothesisEdge,
-                         const vector<LineSegment>& actualEdges,
-                         int numSamples = 10);
-static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
-static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
-static float AlignmentError(const Point2f& pt, const LineSegment& edge);
-
-template<class T>
-static inline float DistanceSquare(const Point_<T>& pt1, const Point_<T>& pt2)
-{
-    return powf(pt1.x - pt2.x, 2) + powf(pt1.y - pt2.y, 2);
-}
-
-template<class T>
-static inline float Distance(const Point_<T>& pt1, const Point_<T>& pt2)
-{
-    return sqrtf(DistanceSquare(pt1, pt2));
-}
 
 LocalMapping::LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular,
                            float alignErrWeight, float shapeErrWeight, float shapeErrThresh)
@@ -779,6 +756,8 @@ void LocalMapping::FindLandmarks()
     if (mpCurrentKeyFrame->mImColor.empty())
         return;
 
+    Mat canvas = mpCurrentKeyFrame->mImColor.clone();
+
     using namespace chrono;
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
 
@@ -790,6 +769,10 @@ void LocalMapping::FindLandmarks()
     cout << "YOLOv3 took " << timeSpan.count() << " seconds." << endl;
 
     auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
+
+    for (auto& seg: lineSegs) {
+        line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 2);
+    }
 
     // Get Intrinsic and Extrinsic Matrix
     const auto M = mpCurrentKeyFrame->GetPose(); // 4 x 4 projection matrix
@@ -811,9 +794,10 @@ void LocalMapping::FindLandmarks()
     }
 
     t1 = high_resolution_clock::now();
-    Mat canvas = mpCurrentKeyFrame->mImColor.clone();
     for (auto& object : objects2D) {
         auto& bbox = object.bbox;
+        // draw bbox
+        rectangle(canvas, bbox, Scalar(255, 0, 0), 1, CV_AA);
 
         // Ignore the bounding box that goes outside the frame.
         if (bbox.x < 0 || bbox.y < 0
@@ -834,17 +818,12 @@ void LocalMapping::FindLandmarks()
         if (seen)
             continue;
 
-        const Point topLeft(bbox.x, bbox.y);
-        const Point topRight(bbox.x + bbox.width, bbox.y);
-        const Point botLeft(bbox.x, bbox.y + bbox.height);
-        const Point botRight(bbox.x + bbox.width, bbox.y + bbox.height);
-
         // Choose the line segments lying in the bounding box for scoring.
-        vector<LineSegment> segsInBbox;
+        vector<LineSegment*> segsInBbox;
         segsInBbox.reserve(lineSegs.size());
-        for (auto lineSeg : lineSegs) {
+        for (auto& lineSeg : lineSegs) {
             if (lineSeg.first.inside(bbox) && lineSeg.second.inside(bbox)) {
-                segsInBbox.emplace_back(lineSeg);
+                segsInBbox.emplace_back(&lineSeg);
             }
         }
 
@@ -853,288 +832,17 @@ void LocalMapping::FindLandmarks()
 
         // Find landmarks with respect to the detected objects.
         Mat bestRlw, bestInvRlw;
-        CuboidProposal proposal;
-        vector<float> distErrs, alignErrs, shapeErrs;
-        vector<CuboidProposal> candidates;
-        bool isCornerVisible[8] = {true, true, true, true};
-        const auto topXStep = max(2, bbox.width / 10);
-        const auto yaw_start = c_yaw - static_cast<const float>(M_PI_2);
-        const auto yaw_end = c_yaw + static_cast<const float>(M_PI_2);
-        const auto yaw_step = static_cast<const float>(6.f / 180 * M_PI);
-        const auto roll_start = c_roll - static_cast<const float>(M_PI_2 / 6);
-        const auto roll_end = c_roll + static_cast<const float>(M_PI_2 / 6);
-        const auto roll_step = static_cast<const float>(6.f / 180 * M_PI);
-        const auto pitch_start = c_pitch - static_cast<const float>(M_PI_2 / 6);
-        const auto pitch_end = c_pitch + static_cast<const float>(M_PI_2 / 6);
-        const auto pitch_step = static_cast<const float>(6.f / 180 * M_PI);
-        int imgIdx = 0;
-        // Sample corner on the top boundary.
-        for (int topX = bbox.x + (topXStep >> 1); topX < bbox.x + bbox.width - (topXStep >> 1); topX += topXStep) {
-            proposal[0] = Point2f(topX, bbox.y);
-            // Sample the landmark yaw in 180 degrees around the camera yaw.
-            for (float l_yaw = yaw_start; l_yaw < yaw_end; l_yaw += yaw_step) {
-                // Sample the landmark roll in 30 degrees around the camera roll.
-                for (float l_roll = roll_start; l_roll < roll_end; l_roll += roll_step) {
-                    // Sample the landmark pitch in 30 degrees around the camera pitch.
-                    for (float l_pitch = pitch_start; l_pitch < pitch_end; l_pitch += pitch_step) {
-                        // Recover rotation of the landmark.
-                        Mat Rlw = RotationFromRollPitchYaw(l_roll, l_pitch, c_yaw);
-                        Mat invRlw = Rlw.t();
+        float bestErr;
+        CuboidProposal bestProposal = FindBestProposal(bbox, c_yaw, c_roll, c_pitch,
+                                                       mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
+                                                       segsInBbox, K,
+                                                       bestErr,
+                                                       mpCurrentKeyFrame->mnFrameId, mpCurrentKeyFrame->mImColor);
 
-                        // Compute the vanishing points from the pose.
-                        Vec3f R1(cos(l_yaw), sin(l_yaw), 0);
-                        Vec3f R2(-sin(l_yaw), cos(l_yaw), 0);
-                        Vec3f R3(0, 0, 1);
-                        Mat vp1 = K * invRlw * Mat(R1);
-                        Mat vp2 = K * invRlw * Mat(R2);
-                        Mat vp3 = K * invRlw * Mat(R3);
-                        Point2f vp1_homo(vp1.at<float>(0, 0) / vp1.at<float>(2, 0),
-                                         vp1.at<float>(1, 0) / vp1.at<float>(2, 0));
-                        Point2f vp2_homo(vp2.at<float>(0, 0) / vp2.at<float>(2, 0),
-                                         vp2.at<float>(1, 0) / vp2.at<float>(2, 0));
-                        Point2f vp3_homo(vp3.at<float>(0, 0) / vp3.at<float>(2, 0),
-                                         vp3.at<float>(1, 0) / vp3.at<float>(2, 0));
-
-                        // Compute the other corners with respect to the pose, vanishing points and the bounding box.
-                        if (vp3_homo.x < bbox.x || vp3_homo.x > bbox.x + bbox.width ||
-                            vp3_homo.y < bbox.y + bbox.height ||
-                            vp1_homo.y > bbox.y || vp2_homo.y > bbox.y) {
-                            continue;
-                        }
-                        else if ((vp1_homo.x < bbox.x && vp2_homo.x > bbox.x + bbox.width) ||
-                                 (vp1_homo.x > bbox.x + bbox.width && vp2_homo.x < bbox.x)) {
-                            if (vp1_homo.x > bbox.x + bbox.width && vp2_homo.x < bbox.x) {
-                                swap(vp1_homo, vp2_homo);
-                            }
-                            // 3 faces
-                            proposal[1] = LineIntersection(vp1_homo, proposal[0], topRight, botRight);
-                            if (!proposal[1].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[2] = LineIntersection(vp2_homo, proposal[0], topLeft, botLeft);
-                            if (!proposal[2].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[3] = LineIntersection(vp1_homo, proposal[2], vp2_homo, proposal[1]);
-                            if (!proposal[3].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[4] = LineIntersection(vp3_homo, proposal[3], botLeft, botRight);
-                            if (!proposal[4].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[5] = LineIntersection(vp1_homo, proposal[4], vp3_homo, proposal[2]);
-                            if (!proposal[5].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[6] = LineIntersection(vp2_homo, proposal[4], vp3_homo, proposal[1]);
-                            if (!proposal[6].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[7] = LineIntersection(vp1_homo, proposal[6], vp2_homo, proposal[5]);
-                            if (!proposal[7].inside(bbox)) {
-                                continue;
-                            }
-                            isCornerVisible[4] = true;
-                            isCornerVisible[5] = true;
-                            isCornerVisible[6] = true;
-                            isCornerVisible[7] = false;
-                        }
-                        else if ((vp1_homo.x > bbox.x && vp1_homo.x < bbox.x + bbox.width) ||
-                                 (vp2_homo.x > bbox.x && vp2_homo.x < bbox.x + bbox.width)) {
-                            if (vp2_homo.x > bbox.x && vp2_homo.x < bbox.x + bbox.width) {
-                                swap(vp1_homo, vp2_homo);
-                            }
-                            if (vp2_homo.x < bbox.x) {
-                                // 2 faces
-                                proposal[1] = LineIntersection(vp1_homo, proposal[0], topLeft, botLeft);
-                                if (!proposal[1].inside(bbox)) {
-                                    continue;
-                                }
-                                proposal[3] = LineIntersection(vp2_homo, proposal[1], topRight, botRight);
-                            }
-                            else if (vp2_homo.x > bbox.x + bbox.width) {
-                                // 2 faces
-                                proposal[1] = LineIntersection(vp1_homo, proposal[0], topRight, botRight);
-                                if (!proposal[1].inside(bbox)) {
-                                    continue;
-                                }
-                                proposal[3] = LineIntersection(vp2_homo, proposal[1], topLeft, botLeft);
-                                if (!proposal[3].inside(bbox)) {
-                                    continue;
-                                }
-                            }
-                            else {
-                                continue;
-                            }
-                            proposal[2] = LineIntersection(vp1_homo, proposal[3], vp2_homo, proposal[0]);
-                            if (!proposal[2].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[4] = LineIntersection(vp3_homo, proposal[3], botLeft, botRight);
-                            if (!proposal[4].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[5] = LineIntersection(vp1_homo, proposal[4], vp3_homo, proposal[2]);
-                            if (!proposal[5].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[6] = LineIntersection(vp2_homo, proposal[4], vp3_homo, proposal[1]);
-                            if (!proposal[6].inside(bbox)) {
-                                continue;
-                            }
-                            proposal[7] = LineIntersection(vp1_homo, proposal[6], vp2_homo, proposal[5]);
-                            if (!proposal[7].inside(bbox)) {
-                                continue;
-                            }
-                            isCornerVisible[4] = true;
-                            isCornerVisible[5] = false;
-                            isCornerVisible[6] = true;
-                            isCornerVisible[7] = false;
-                        }
-                        else {
-                            continue;
-                        }
-
-                        // Score the proposal.
-                        float distErr = 0, alignErr = 0, shapeErr = 0;
-
-                        // Distance error
-                        float weight_sum = 0;
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[0], proposal[1]), segsInBbox);
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[0], proposal[2]), segsInBbox);
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[1], proposal[3]), segsInBbox);
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[2], proposal[3]), segsInBbox);
-                        distErr += 2 / ChamferDist(make_pair(proposal[1], proposal[6]), segsInBbox);
-                        distErr += 2 / ChamferDist(make_pair(proposal[3], proposal[4]), segsInBbox);
-                        distErr += 1.5 / ChamferDist(make_pair(proposal[4], proposal[6]), segsInBbox);
-                        weight_sum += 11.5;
-                        if (isCornerVisible[5]) {
-                            distErr += 2 / ChamferDist(make_pair(proposal[2], proposal[5]), segsInBbox);
-                            distErr += 1.5 / ChamferDist(make_pair(proposal[4], proposal[5]), segsInBbox);
-                            weight_sum += 3.5;
-                        }
-                        distErr = weight_sum / distErr;
-
-                        // Angle alignment error.
-                        float err_sum[3] = {};
-                        int err_cnt[3] = {};
-                        for (const auto& seg : segsInBbox) {
-                            float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
-                            float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
-                            float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
-
-                            float minErr = err3;
-                            int minErrIdx = 2;
-
-                            if (err1 < 10.0 / 180 * M_PI && err1 < minErr) {
-                                minErr = err1;
-                                minErrIdx = 0;
-                            }
-
-                            if (err2 < 10.0 / 180 * M_PI && err2 < minErr) {
-                                minErr = err2;
-                                minErrIdx = 1;
-                            }
-
-                            if (minErr < 15.0 / 180 * M_PI) {
-                                err_sum[minErrIdx] += minErr;
-                                ++err_cnt[minErrIdx];
-                            }
-                        }
-                        alignErr = 0;
-                        for (int i = 0; i < 3; ++i) {
-                            if (err_cnt[i])
-                                alignErr += err_sum[i] / err_cnt[i];
-                            else
-                                alignErr += M_PI_2;
-                        }
-                        alignErr /= 3;
-
-                        // Shape error.
-                        float edgeLenSum1 = Distance(proposal[0], proposal[1])
-                                            + Distance(proposal[2], proposal[3])
-                                            + Distance(proposal[4], proposal[5])
-                                            + Distance(proposal[6], proposal[7]);
-                        float edgeLenSum2 = Distance(proposal[0], proposal[2])
-                                            + Distance(proposal[1], proposal[3])
-                                            + Distance(proposal[4], proposal[6])
-                                            + Distance(proposal[5], proposal[7]);
-                        if (edgeLenSum1 < 80 || edgeLenSum2 < 80) {
-                            continue;
-                        }
-                        shapeErr = edgeLenSum1 > edgeLenSum2 ?
-                                   edgeLenSum1 / edgeLenSum2 :
-                                   edgeLenSum2 / edgeLenSum1;
-                        shapeErr = max(shapeErr - mShapeErrThresh, 0.f) * 100;
-
-                        distErrs.push_back(distErr);
-                        alignErrs.push_back(alignErr);
-                        shapeErrs.push_back(shapeErr);
-                        candidates.push_back(proposal);
-
-                        if (imgIdx % 5 == 0) {
-                            // draw bbox
-                            Mat image;
-                            mpCurrentKeyFrame->mImColor.copyTo(image);
-                            rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
-                            // draw cube
-                            line(image, proposal[0], proposal[1], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[1], proposal[3], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[3], proposal[2], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[2], proposal[0], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[0], proposal[7], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[1], proposal[6], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[2], proposal[5], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[3], proposal[4], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[7], proposal[6], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[6], proposal[4], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[4], proposal[5], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposal[5], proposal[7], Scalar(0, 255, 0), 1, CV_AA);
-
-                            for (auto& seg : segsInBbox) {
-                                line(image, seg.first, seg.second, Scalar(0, 0, 255), 1, CV_AA);
-                            }
-
-                            std::cout << "Errors of Proposal " << imgIdx << " in Frame " << mpCurrentKeyFrame->mnFrameId
-                                      << ": " << distErr << ' ' << alignErr << ' ' << shapeErr << std::endl;
-                            imwrite("Outputs/" + std::to_string(mpCurrentKeyFrame->mnFrameId) + "_" + std::to_string(imgIdx)
-                                    + ".jpg", image);
-                        }
-                        ++imgIdx;
-                    }
-                }
-            }
-        }
-
-        const int numErr = distErrs.size();
-        if (!numErr)
+        if (bestErr == -1)
             continue;
-
-        const float minDistErr = *min_element(distErrs.begin(), distErrs.end());
-        const float minAlignErr = *min_element(alignErrs.begin(), alignErrs.end());
-        const float maxDistErr = *max_element(distErrs.begin(), distErrs.end());
-        const float maxAlignErr = *max_element(alignErrs.begin(), alignErrs.end());
-        float bestErr = -1;
-        int bestProposalIdx = -1;
-
-        for (int i = 0; i < numErr; ++i) {
-            // Sum the errors by weight.
-            float normDistErr = (distErrs[i] - minDistErr) / (maxDistErr - minDistErr);
-            float normAlignErr = (alignErrs[i] - minAlignErr) / (maxAlignErr - minAlignErr);
-            float totalErr = (normDistErr + mAlignErrWeight * normAlignErr) / (1 + mAlignErrWeight)
-                             + mShapeErrWeight * shapeErrs[i];
-            if (totalErr < bestErr || bestErr == -1) {
-                bestErr = totalErr;
-                bestProposalIdx = i;
-            }
-        }
-
-        CuboidProposal& bestProposal = candidates[bestProposalIdx];
         {
-            // draw bbox
-            rectangle(canvas, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
-            // draw cube
+            // Draw cuboid proposal
             line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 1, CV_AA);
             line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 1, CV_AA);
             line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 1, CV_AA);
@@ -1154,8 +862,8 @@ void LocalMapping::FindLandmarks()
         auto mapPoints = mpCurrentKeyFrame->GetMapPointMatches();
         vector<MapPoint*> includedMapPoints;
         includedMapPoints.reserve(mapPoints.size());
-        for (auto mapPoint : mpCurrentKeyFrame->GetMapPoints()) {
-            auto pt = mpCurrentKeyFrame->mvKeysUn[mapPoint->GetObservations()[mpCurrentKeyFrame]].pt;
+        for (auto& mapPoint : mpCurrentKeyFrame->GetMapPoints()) {
+            const auto& pt = mpCurrentKeyFrame->mvKeysUn[mapPoint->GetObservations()[mpCurrentKeyFrame]].pt;
             if (pt.inside(bbox)) {
                 includedMapPoints.emplace_back(mapPoint);
             }
@@ -1185,116 +893,6 @@ void LocalMapping::FindLandmarks()
 
     // Visualize intermediate results used for finding landmarks.
     mpFrameDrawer->UpdateKeyframe(mpCurrentKeyFrame, objects2D);
-}
-
-static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw)
-{
-    roll = atan2(rot.at<float>(2, 1), rot.at<float>(2, 2));
-    pitch = atan2(-rot.at<float>(2, 0), sqrt(powf(rot.at<float>(2, 1), 2) + powf(rot.at<float>(2, 2), 2)));
-    yaw = atan2(rot.at<float>(1, 0), rot.at<float>(0, 0));
-}
-
-static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
-{
-    Mat rot(3, 3, CV_32F);
-    rot.at<float>(0, 0) = cos(yaw) * cos(pitch);
-    rot.at<float>(0, 1) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
-    rot.at<float>(0, 2) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
-    rot.at<float>(1, 0) = sin(yaw) * cos(pitch);
-    rot.at<float>(1, 1) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
-    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
-    rot.at<float>(2, 0) = -sin(pitch);
-    rot.at<float>(2, 1) = cos(pitch) * sin(roll);
-    rot.at<float>(2, 2) = cos(pitch) * cos(roll);
-    return rot;
-}
-
-static float Distance(const Point2f& pt, const LineSegment& edge)
-{
-    Vec2f v1(edge.first.x - pt.x, edge.first.y - pt.y);
-    Vec2f v2(edge.second.x - pt.x, edge.second.y - pt.y);
-    Vec2f v3(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
-    auto l1sq = DistanceSquare(edge.first, pt);
-    auto l2sq = DistanceSquare(edge.second, pt);
-    auto l3sq = DistanceSquare(edge.first, edge.second);
-    if (l1sq + l3sq < l2sq)
-        return sqrtf(l1sq);
-    else if (l2sq + l3sq < l1sq)
-        return sqrtf(l2sq);
-    else {
-        // The pedal falls on the edge.
-        float l1 = sqrtf(l1sq);
-        float l2 = sqrtf(l2sq);
-        float l3 = sqrtf(l3sq);
-        float l1l2 = l1 * l2;
-        float cosine = (l1sq + l2sq - l3sq) / (2 * l1l2);
-        float sine = sqrtf(1 - cosine * cosine);
-        float h = l1l2 * sine / l3;
-        return h;
-    }
-}
-
-static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2f& C, const Point2f& D)
-{
-    // Line AB represented as a1x + b1y = c1
-    float a1 = B.y - A.y;
-    float b1 = A.x - B.x;
-    float c1 = a1 * (A.x) + b1 * (A.y);
-
-    // Line CD represented as a2x + b2y = c2
-    float a2 = D.y - C.y;
-    float b2 = C.x - D.x;
-    float c2 = a2 * (C.x) + b2 * (C.y);
-
-    float determinant = a1 * b2 - a2 * b1;
-
-    if (determinant == 0) {
-        // The lines are parallel. This is simplified
-        // by returning a pair of FLT_MAX
-        return Point2f(FLT_MAX, FLT_MAX);
-    }
-    else {
-        float x = (b2 * c1 - b1 * c2) / determinant;
-        float y = (a1 * c2 - a2 * c1) / determinant;
-        return Point2f(x, y);
-    }
-}
-
-static float ChamferDist(const LineSegment& hypothesis,
-                         const vector<LineSegment>& actualEdges,
-                         int numSamples)
-{
-    float dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
-    float dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
-    float x = hypothesis.first.x;
-    float y = hypothesis.first.y;
-    float chamferDist = 0;
-    for (int i = 0; i < numSamples; ++i) {
-        Point pt(x, y);
-        float smallest = -1;
-        for (const auto& edge : actualEdges) {
-            float dist = Distance(pt, edge);
-            if (smallest == -1 || dist < smallest) {
-                smallest = dist;
-            }
-        }
-        chamferDist += smallest;
-
-        x += dx;
-        y += dy;
-    }
-    return chamferDist;
-}
-
-static float AlignmentError(const Point2f& pt, const LineSegment& edge)
-{
-    Vec2f v1(pt.x - edge.first.x, pt.y - edge.first.y);
-    Vec2f v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
-    float cosine = v1.dot(v2) / (norm(v1) * norm(v2));
-    float angle = acos(cosine);
-    if (angle > M_PI_2)
-        angle = M_PI - angle;
-    return angle;
 }
 
 } //namespace ORB_SLAM
