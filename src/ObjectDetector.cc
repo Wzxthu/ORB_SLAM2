@@ -30,6 +30,8 @@ using namespace std;
 
 namespace ORB_SLAM2 {
 
+std::vector<std::string> ObjectDetector::mClasses;
+
 ObjectDetector::ObjectDetector(
         const char* cfgFile,
         const char* weightFile,
@@ -89,6 +91,52 @@ ObjectDetector::ObjectDetector(
     }
 }
 
+void ObjectDetector::DrawPred(const Object& obj, cv::Mat& frame)
+{
+    DrawPred(obj.classIdx, obj.conf, obj.bbox, frame);
+}
+
+void ObjectDetector::DrawPred(int classId, float conf, cv::Rect bbox, cv::Mat& frame)
+{
+    DrawPred(classId, conf, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height, frame);
+}
+
+// Draw the predicted bounding box
+void ObjectDetector::DrawPred(int classId, float conf, int left, int top, int right, int bottom, Mat& frame)
+{
+    //Draw a rectangle displaying the bounding box
+    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(255, 0, 0), 2);
+
+    //Get the label for the class name and its confidence
+    string label = format("%.2f", conf);
+    if (mClasses.empty()) {
+        LoadClassNames();
+    }
+    if (!mClasses.empty()) {
+        CV_Assert(classId < (int) mClasses.size());
+        label = mClasses[classId] + ":" + label;
+    }
+
+    //Display the label at the top of the bounding box
+    int baseLine;
+    Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
+    top = max(top, labelSize.height);
+    putText(frame, label, Point(left, top), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(0, 0, 0), 4);
+    putText(frame, label, Point(left, top), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255), 2);
+}
+
+std::vector<std::string> ObjectDetector::LoadClassNames()
+{
+    // Load names of classes
+    string classesFile = "Thirdparty/darknet/data/coco.names";
+    ifstream ifs(classesFile.c_str());
+    string line;
+    mClasses.clear();
+    while (getline(ifs, line))
+        mClasses.push_back(line);
+    return mClasses;
+}
+
 void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
 {
     // Compute the input size to fit the preset input area. Both width and height should be times of 32.
@@ -96,15 +144,12 @@ void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
     int inputWidth = static_cast<int>(ceil(im.cols * resizeRatio / 32)) << 5;
     int inputHeight = static_cast<int>(ceil(im.rows * resizeRatio / 32)) << 5;
 
-//    inputWidth = inputHeight = 416;
-
-//    cout << "Input Size: " << inputWidth << "x" << inputHeight << endl;
-
     // Create a 4D blob from the frame.
-    blobFromImage(im, mBlob, 1 / 255.0, cvSize(inputWidth, inputHeight), Scalar(0, 0, 0), true, false);
+    Mat blob = blobFromImage(im, 1 / 255.0, cvSize(inputWidth, inputHeight), Scalar(0, 0, 0), true, false);
 
     //Sets the input to the network
-    mNet.setInput(mBlob);
+    mNet.setInput(blob);
+    cout << blob.size << endl;
 
     // Runs the forward pass to get output of the output layers
     vector<Mat> outs;

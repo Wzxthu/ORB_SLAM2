@@ -89,7 +89,7 @@ src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
 src/ObjectDetector.cc
-src/Landmark.cc include/LineSegmentDetector.h src/LineSegmentDetector.cc)
+src/Landmark.cc include/LineSegmentDetector.h src/LineSegmentDetector.cc src/CubeSLAM.cc)
 
 link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib)
 
@@ -136,3 +136,6 @@ target_link_libraries(mono_kitti ${PROJECT_NAME})
 add_executable(mono_euroc
 Examples/Monocular/mono_euroc.cc)
 target_link_libraries(mono_euroc ${PROJECT_NAME})
+
+add_executable(cubeslam_test test/cubeslam_test.cc)
+target_link_libraries(cubeslam_test ${PROJECT_NAME})

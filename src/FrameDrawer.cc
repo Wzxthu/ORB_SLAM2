@@ -20,6 +20,7 @@
 
 #include "FrameDrawer.h"
 #include "Tracking.h"
+#include "ObjectDetector.h"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -36,23 +37,16 @@ FrameDrawer::FrameDrawer(Map* pMap)
         :mpMap(pMap)
 {
     mState = Tracking::SYSTEM_NOT_READY;
-    mIm = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
-    mKeyframeIm = cv::Mat(480, 640, CV_8UC3, cv::Scalar(0, 0, 0));
-
-    // Load names of classes
-    string classesFile = "Thirdparty/darknet/data/coco.names";
-    ifstream ifs(classesFile.c_str());
-    string line;
-    while (getline(ifs, line))
-        mClasses.push_back(line);
+    mIm = Mat(480, 640, CV_8UC3, Scalar(0, 0, 0));
+    mKeyframeIm = Mat(480, 640, CV_8UC3, Scalar(0, 0, 0));
 }
 
-cv::Mat FrameDrawer::DrawFrame()
+Mat FrameDrawer::DrawFrame()
 {
-    cv::Mat im;
-    vector<cv::KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
+    Mat im;
+    vector<KeyPoint> vIniKeys; // Initialization: KeyPoints in reference frame
     vector<int> vMatches; // Initialization: correspondeces with reference keypoints
-    vector<cv::KeyPoint> vCurrentKeys; // KeyPoints in current frame
+    vector<KeyPoint> vCurrentKeys; // KeyPoints in current frame
     vector<bool> vbVO, vbMap; // Tracked MapPoints in current frame
     int state; // Tracking state
 
@@ -88,8 +82,8 @@ cv::Mat FrameDrawer::DrawFrame()
     {
         for (unsigned int i = 0; i < vMatches.size(); i++) {
             if (vMatches[i] >= 0) {
-                cv::line(im, vIniKeys[i].pt, vCurrentKeys[vMatches[i]].pt,
-                         cv::Scalar(0, 255, 0));
+                line(im, vIniKeys[i].pt, vCurrentKeys[vMatches[i]].pt,
+                     Scalar(0, 255, 0));
             }
         }
     }
@@ -101,7 +95,7 @@ cv::Mat FrameDrawer::DrawFrame()
         const int n = vCurrentKeys.size();
         for (int i = 0; i < n; i++) {
             if (vbVO[i] || vbMap[i]) {
-                cv::Point2f pt1, pt2;
+                Point2f pt1, pt2;
                 pt1.x = vCurrentKeys[i].pt.x - r;
                 pt1.y = vCurrentKeys[i].pt.y - r;
                 pt2.x = vCurrentKeys[i].pt.x + r;
@@ -109,55 +103,35 @@ cv::Mat FrameDrawer::DrawFrame()
 
                 // This is a match to a MapPoint in the map
                 if (vbMap[i]) {
-                    cv::rectangle(im, pt1, pt2, cv::Scalar(0, 255, 0));
-                    cv::circle(im, vCurrentKeys[i].pt, 2, cv::Scalar(0, 255, 0), -1);
+                    rectangle(im, pt1, pt2, Scalar(0, 255, 0));
+                    circle(im, vCurrentKeys[i].pt, 2, Scalar(0, 255, 0), -1);
                     mnTracked++;
                 }
                 else // This is match to a "visual odometry" MapPoint created in the last frame
                 {
-                    cv::rectangle(im, pt1, pt2, cv::Scalar(255, 0, 0));
-                    cv::circle(im, vCurrentKeys[i].pt, 2, cv::Scalar(255, 0, 0), -1);
+                    rectangle(im, pt1, pt2, Scalar(255, 0, 0));
+                    circle(im, vCurrentKeys[i].pt, 2, Scalar(255, 0, 0), -1);
                     mnTrackedVO++;
                 }
             }
         }
     }
 
-    cv::Mat imWithInfo;
+    Mat imWithInfo;
     DrawTextInfo(im, state, imWithInfo);
 
     return imWithInfo;
 }
 
-// Draw the predicted bounding box
-void FrameDrawer::DrawPred(int classId, float conf, int left, int top, int right, int bottom, Mat& frame)
-{
-    //Draw a rectangle displaying the bounding box
-    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 255));
-
-    //Get the label for the class name and its confidence
-    string label = format("%.2f", conf);
-    if (!mClasses.empty()) {
-        CV_Assert(classId < (int) mClasses.size());
-        label = mClasses[classId] + ":" + label;
-    }
-
-    //Display the label at the top of the bounding box
-    int baseLine;
-    Size labelSize = getTextSize(label, FONT_HERSHEY_SIMPLEX, 0.5, 1, &baseLine);
-    top = max(top, labelSize.height);
-    putText(frame, label, Point(left, top), FONT_HERSHEY_SIMPLEX, 0.5, Scalar(255, 255, 255));
-}
-
 // Draw last processed keyframe.
-cv::Mat FrameDrawer::DrawKeyframe()
+Mat FrameDrawer::DrawKeyframe()
 {
     unique_lock<mutex> lock(mMutex);
     // TODO: Visualize detected landmarks.
     return mKeyframeIm;
 }
 
-void FrameDrawer::DrawTextInfo(cv::Mat& im, int nState, cv::Mat& imText)
+void FrameDrawer::DrawTextInfo(Mat& im, int nState, Mat& imText)
 {
     stringstream s;
     if (nState == Tracking::NO_IMAGES_YET)
@@ -183,13 +157,13 @@ void FrameDrawer::DrawTextInfo(cv::Mat& im, int nState, cv::Mat& imText)
     }
 
     int baseline = 0;
-    cv::Size textSize = cv::getTextSize(s.str(), cv::FONT_HERSHEY_PLAIN, 1, 1, &baseline);
+    Size textSize = getTextSize(s.str(), FONT_HERSHEY_PLAIN, 1, 1, &baseline);
 
-    imText = cv::Mat(im.rows + textSize.height + 10, im.cols, im.type());
+    imText = Mat(im.rows + textSize.height + 10, im.cols, im.type());
     im.copyTo(imText.rowRange(0, im.rows).colRange(0, im.cols));
-    imText.rowRange(im.rows, imText.rows) = cv::Mat::zeros(textSize.height + 10, im.cols, im.type());
-    cv::putText(imText, s.str(), cv::Point(5, imText.rows - 5), cv::FONT_HERSHEY_PLAIN, 1, cv::Scalar(255, 255, 255), 1,
-                8);
+    imText.rowRange(im.rows, imText.rows) = Mat::zeros(textSize.height + 10, im.cols, im.type());
+    putText(imText, s.str(), Point(5, imText.rows - 5), FONT_HERSHEY_PLAIN, 1, Scalar(255, 255, 255), 1,
+            8);
 
 }
 
@@ -228,9 +202,7 @@ void FrameDrawer::UpdateKeyframe(const KeyFrame* keyFrame, const vector<Object>&
     unique_lock<mutex> lock(mMutex);
     mKeyframeIm = keyFrame->mImColor.clone();
     for (const auto& obj : objects2D) {
-        DrawPred(obj.classIdx, obj.conf,
-                 obj.bbox.x, obj.bbox.y, obj.bbox.x + obj.bbox.width, obj.bbox.y + obj.bbox.height,
-                 mKeyframeIm);
+        ObjectDetector::DrawPred(obj.classIdx, obj.conf, obj.bbox, mKeyframeIm);
     }
 
     mpLandmarks = keyFrame->mpLandmarks;
