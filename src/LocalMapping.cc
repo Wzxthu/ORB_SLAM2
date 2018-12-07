@@ -812,6 +812,7 @@ void LocalMapping::FindLandmarks()
     }
 
     t1 = high_resolution_clock::now();
+    Mat invK = mpCurrentKeyFrame->mK.inv();
     for (auto& object : objects2D) {
         // Ignore the bounding box that goes outside the frame.
         if (object.bbox.x < 0 || object.bbox.y < 0
@@ -1017,8 +1018,8 @@ void LocalMapping::FindLandmarks()
             }
         }
 
-        // TODO: Reason the pose and dimension of the landmark from the best proposal.
-        // First approximate the centroid of the landmark to be the average of the map points that fall in the bounding box.
+        // Reason the pose and dimension of the landmark from the best proposal.
+        // Approximate the depth of the centroid to be the average of the map points that fall in the bounding box.
         auto mapPoints = mpCurrentKeyFrame->GetMapPointMatches();
         vector<MapPoint*> includedMapPoints;
         includedMapPoints.reserve(mapPoints.size());
@@ -1028,12 +1029,20 @@ void LocalMapping::FindLandmarks()
                 includedMapPoints.emplace_back(mapPoint);
             }
         }
-        Mat worldPos;
+        Mat worldAvgPos;
         for (auto mapPoint : includedMapPoints) {
-            worldPos += mapPoint->GetWorldPos();
+            worldAvgPos += mapPoint->GetWorldPos();
         }
-        worldPos /= includedMapPoints.size();
-        Mat camCoordPos = mpCurrentKeyFrame->GetPose() * worldPos;
+        worldAvgPos /= includedMapPoints.size();
+        Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
+        float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
+        Mat centroid = (Mat_<float>(3, 1) <<
+                object.bbox.x + (object.bbox.width >> 1),
+                object.bbox.y + (object.bbox.height >> 1),
+                1);
+        centroid = invK * centroid;
+        centroid *= avgDepth / centroid.at<float>(3, 3);
+        // TODO: Recover the dimension of the landmark with the centroid and the proposal.
 
 
         // TODO: Store the pose corresponding to best proposal into the keyframe.
@@ -1193,7 +1202,7 @@ static float ChamferDistance(const LineSegment& hypothesis,
         x += dx;
         y += dy;
     }
-    return 0;
+    return chamferDist;
 }
 
 static float AlignmentError(const Point2f& pt, const LineSegment& edge)
