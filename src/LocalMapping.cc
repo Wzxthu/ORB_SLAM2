@@ -38,6 +38,8 @@ using namespace cv;
 
 namespace ORB_SLAM2 {
 
+typedef array<Point2f, 8> Proposal;
+
 static float Distance(const Point2f& pt, const LineSegment& edge);
 static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2f& C, const Point2f& D);
 static float ChamferDist(const LineSegment& hypothesisEdge,
@@ -861,9 +863,9 @@ void LocalMapping::FindLandmarks()
         // TODO: Find landmarks with respect to the detected objects.
         // Represent the proposal with the coordinates in frame of the 8 corners.
         Mat bestRlw, bestInvRlw;
-        vector<Point2f> proposalCorners(8);
+        Proposal proposal;
         vector<float> distErrs, alignErrs, shapeErrs;
-        vector<vector<Point2f>> candidates;
+        vector<Proposal> candidates;
         bool isCornerVisible[8] = {true, true, true, true};
         int step = round(object.bbox.width / 10.0);
         int resolution = min(20, step);
@@ -871,7 +873,7 @@ void LocalMapping::FindLandmarks()
         for (float sampleX = object.bbox.x + 5;
              sampleX < object.bbox.x + object.bbox.width - 5;
              sampleX += resolution) {
-            proposalCorners[0] = Point2f(sampleX, object.bbox.y);
+            proposal[0] = Point2f(sampleX, object.bbox.y);
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = yaw_init - 45.0 / 180 * M_PI;
                  l_yaw < yaw_init + 45.0 / 180 * M_PI;
@@ -912,36 +914,32 @@ void LocalMapping::FindLandmarks()
                                 swap(vp1_homo, vp2_homo);
                             }
                             // 3 faces
-                            proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight, botRight);
-                            if (!proposalCorners[1].inside(object.bbox)) {
+                            proposal[1] = LineIntersection(vp1_homo, proposal[0], topRight, botRight);
+                            if (!proposal[1].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[2] = LineIntersection(vp2_homo, proposalCorners[0], topLeft, botLeft);
-                            if (!proposalCorners[2].inside(object.bbox)) {
+                            proposal[2] = LineIntersection(vp2_homo, proposal[0], topLeft, botLeft);
+                            if (!proposal[2].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[3] = LineIntersection(vp1_homo, proposalCorners[2], vp2_homo,
-                                                                  proposalCorners[1]);
-                            if (!proposalCorners[3].inside(object.bbox)) {
+                            proposal[3] = LineIntersection(vp1_homo, proposal[2], vp2_homo, proposal[1]);
+                            if (!proposal[3].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft, botRight);
-                            if (!proposalCorners[4].inside(object.bbox)) {
+                            proposal[4] = LineIntersection(vp3_homo, proposal[3], botLeft, botRight);
+                            if (!proposal[4].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
-                                                                  proposalCorners[2]);
-                            if (!proposalCorners[5].inside(object.bbox)) {
+                            proposal[5] = LineIntersection(vp1_homo, proposal[4], vp3_homo, proposal[2]);
+                            if (!proposal[5].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
-                                                                  proposalCorners[1]);
-                            if (!proposalCorners[6].inside(object.bbox)) {
+                            proposal[6] = LineIntersection(vp2_homo, proposal[4], vp3_homo, proposal[1]);
+                            if (!proposal[6].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
-                                                                  proposalCorners[5]);
-                            if (!proposalCorners[7].inside(object.bbox)) {
+                            proposal[7] = LineIntersection(vp1_homo, proposal[6], vp2_homo, proposal[5]);
+                            if (!proposal[7].inside(object.bbox)) {
                                 continue;
                             }
                             isCornerVisible[4] = true;
@@ -956,53 +954,44 @@ void LocalMapping::FindLandmarks()
                             }
                             if (vp2_homo.x < object.bbox.x) {
                                 // 2 faces
-                                proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topLeft,
-                                                                      botLeft);
-                                if (!proposalCorners[1].inside(object.bbox)) {
+                                proposal[1] = LineIntersection(vp1_homo, proposal[0], topLeft, botLeft);
+                                if (!proposal[1].inside(object.bbox)) {
                                     continue;
                                 }
-                                proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topRight,
-                                                                      botRight);
+                                proposal[3] = LineIntersection(vp2_homo, proposal[1], topRight, botRight);
                             }
                             else if (vp2_homo.x > object.bbox.x + object.bbox.width) {
                                 // 2 faces
-                                proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight,
-                                                                      botRight);
-                                if (!proposalCorners[1].inside(object.bbox)) {
+                                proposal[1] = LineIntersection(vp1_homo, proposal[0], topRight, botRight);
+                                if (!proposal[1].inside(object.bbox)) {
                                     continue;
                                 }
-                                proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topLeft,
-                                                                      botLeft);
-                                if (!proposalCorners[3].inside(object.bbox)) {
+                                proposal[3] = LineIntersection(vp2_homo, proposal[1], topLeft, botLeft);
+                                if (!proposal[3].inside(object.bbox)) {
                                     continue;
                                 }
                             }
                             else {
                                 continue;
                             }
-                            proposalCorners[2] = LineIntersection(vp1_homo, proposalCorners[3], vp2_homo,
-                                                                  proposalCorners[0]);
-                            if (!proposalCorners[2].inside(object.bbox)) {
+                            proposal[2] = LineIntersection(vp1_homo, proposal[3], vp2_homo, proposal[0]);
+                            if (!proposal[2].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[4] = LineIntersection(vp3_homo, proposalCorners[3], botLeft,
-                                                                  botRight);
-                            if (!proposalCorners[4].inside(object.bbox)) {
+                            proposal[4] = LineIntersection(vp3_homo, proposal[3], botLeft, botRight);
+                            if (!proposal[4].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[5] = LineIntersection(vp1_homo, proposalCorners[4], vp3_homo,
-                                                                  proposalCorners[2]);
-                            if (!proposalCorners[5].inside(object.bbox)) {
+                            proposal[5] = LineIntersection(vp1_homo, proposal[4], vp3_homo, proposal[2]);
+                            if (!proposal[5].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[6] = LineIntersection(vp2_homo, proposalCorners[4], vp3_homo,
-                                                                  proposalCorners[1]);
-                            if (!proposalCorners[6].inside(object.bbox)) {
+                            proposal[6] = LineIntersection(vp2_homo, proposal[4], vp3_homo, proposal[1]);
+                            if (!proposal[6].inside(object.bbox)) {
                                 continue;
                             }
-                            proposalCorners[7] = LineIntersection(vp1_homo, proposalCorners[6], vp2_homo,
-                                                                  proposalCorners[5]);
-                            if (!proposalCorners[7].inside(object.bbox)) {
+                            proposal[7] = LineIntersection(vp1_homo, proposal[6], vp2_homo, proposal[5]);
+                            if (!proposal[7].inside(object.bbox)) {
                                 continue;
                             }
                             isCornerVisible[4] = true;
@@ -1019,18 +1008,18 @@ void LocalMapping::FindLandmarks()
 
                         // Distance error
                         float weight_sum = 0;
-                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[0], proposalCorners[1]), segsInBbox);
-                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[0], proposalCorners[2]), segsInBbox);
-                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[1], proposalCorners[3]), segsInBbox);
-                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[2], proposalCorners[3]), segsInBbox);
-                        distErr += 2 / ChamferDist(make_pair(proposalCorners[1], proposalCorners[6]), segsInBbox);
-                        distErr += 2 / ChamferDist(make_pair(proposalCorners[3], proposalCorners[4]), segsInBbox);
-                        distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[6]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposal[0], proposal[1]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposal[0], proposal[2]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposal[1], proposal[3]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposal[2], proposal[3]), segsInBbox);
+                        distErr += 2 / ChamferDist(make_pair(proposal[1], proposal[6]), segsInBbox);
+                        distErr += 2 / ChamferDist(make_pair(proposal[3], proposal[4]), segsInBbox);
+                        distErr += 3 / 2 / ChamferDist(make_pair(proposal[4], proposal[6]), segsInBbox);
                         weight_sum += 11.5;
                         if (isCornerVisible[5]) {
-                            distErr += 2 / ChamferDist(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
+                            distErr += 2 / ChamferDist(make_pair(proposal[2], proposal[5]), segsInBbox);
                             distErr +=
-                                    3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
+                                    3 / 2 / ChamferDist(make_pair(proposal[4], proposal[5]), segsInBbox);
                             weight_sum += 3.5;
                         }
                         distErr = weight_sum / distErr;
@@ -1071,14 +1060,14 @@ void LocalMapping::FindLandmarks()
                         alignErr /= 3;
 
                         // Shape error.
-                        float edgeLenSum1 = Distance(proposalCorners[0], proposalCorners[1])
-                                            + Distance(proposalCorners[2], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[5])
-                                            + Distance(proposalCorners[6], proposalCorners[7]);
-                        float edgeLenSum2 = Distance(proposalCorners[0], proposalCorners[2])
-                                            + Distance(proposalCorners[1], proposalCorners[3])
-                                            + Distance(proposalCorners[4], proposalCorners[6])
-                                            + Distance(proposalCorners[5], proposalCorners[7]);
+                        float edgeLenSum1 = Distance(proposal[0], proposal[1])
+                                            + Distance(proposal[2], proposal[3])
+                                            + Distance(proposal[4], proposal[5])
+                                            + Distance(proposal[6], proposal[7]);
+                        float edgeLenSum2 = Distance(proposal[0], proposal[2])
+                                            + Distance(proposal[1], proposal[3])
+                                            + Distance(proposal[4], proposal[6])
+                                            + Distance(proposal[5], proposal[7]);
                         if (edgeLenSum1 / 4 < 20 || edgeLenSum2 / 4 < 20) {
                             continue;
                         }
@@ -1089,7 +1078,7 @@ void LocalMapping::FindLandmarks()
                         distErrs.push_back(distErr);
                         alignErrs.push_back(alignErr);
                         shapeErrs.push_back(shapeErr);
-                        candidates.push_back(proposalCorners);
+                        candidates.push_back(proposal);
 
                         if (imgIdx % 5 == 0) {
                             // draw bbox
@@ -1097,25 +1086,26 @@ void LocalMapping::FindLandmarks()
                             mpCurrentKeyFrame->mImColor.copyTo(image);
                             rectangle(image, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
                             // draw cube
-                            line(image, proposalCorners[0], proposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[1], proposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[3], proposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[2], proposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[0], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[1], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[2], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[3], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[7], proposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[6], proposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[4], proposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-                            line(image, proposalCorners[5], proposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[0], proposal[1], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[1], proposal[3], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[3], proposal[2], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[2], proposal[0], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[0], proposal[7], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[1], proposal[6], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[2], proposal[5], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[3], proposal[4], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[7], proposal[6], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[6], proposal[4], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[4], proposal[5], Scalar(0, 255, 0), 1, CV_AA);
+                            line(image, proposal[5], proposal[7], Scalar(0, 255, 0), 1, CV_AA);
 
                             for (auto& seg : segsInBbox) {
                                 line(image, seg.first, seg.second, Scalar(0, 0, 255), 1, CV_AA);
                             }
 
                             std::cout << distErr << ' ' << alignErr << ' ' << shapeErr << std::endl;
-                            imwrite("Outputs/" + std::to_string(mpCurrentKeyFrame->mnId) + "_" + std::to_string(imgIdx) + ".jpg", image);
+                            imwrite("Outputs/" + std::to_string(mpCurrentKeyFrame->mnId) + "_" + std::to_string(imgIdx)
+                                    + ".jpg", image);
                         }
                         ++imgIdx;
                     }
@@ -1132,7 +1122,7 @@ void LocalMapping::FindLandmarks()
         const float maxDistErr = *max_element(distErrs.begin(), distErrs.end());
         const float maxAlignErr = *max_element(alignErrs.begin(), alignErrs.end());
         float bestErr = -1;
-        int bestProposal = -1;
+        int bestProposalIdx = -1;
 
         for (int i = 0; i < numErr; ++i) {
             // Sum the errors by weight.
@@ -1142,29 +1132,29 @@ void LocalMapping::FindLandmarks()
                              + mShapeErrWeight * shapeErrs[i];
             if (totalErr < bestErr || bestErr == -1) {
                 bestErr = totalErr;
-                bestProposal = i;
+                bestProposalIdx = i;
                 std::cout << normDistErr << ' ' << normAlignErr << ' ' << shapeErrs[i] << ' ' << distErrs[i] << ' '
                           << alignErrs[i] << std::endl;
             }
         }
-        vector<Point2f> bestProposalCorners = candidates[bestProposal];
 
+        Proposal& bestProposal = candidates[bestProposalIdx];
         {
             // draw bbox
             rectangle(canvas, topLeft, botRight, Scalar(255, 0, 0), 1, CV_AA);
             // draw cube
-            line(canvas, bestProposalCorners[0], bestProposalCorners[1], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[1], bestProposalCorners[3], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[3], bestProposalCorners[2], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[2], bestProposalCorners[0], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[0], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[1], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[2], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[3], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[7], bestProposalCorners[6], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[6], bestProposalCorners[4], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[4], bestProposalCorners[5], Scalar(0, 255, 0), 1, CV_AA);
-            line(canvas, bestProposalCorners[5], bestProposalCorners[7], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 1, CV_AA);
+            line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 1, CV_AA);
             cout << "bestErr: " << bestErr << endl;
         }
 
