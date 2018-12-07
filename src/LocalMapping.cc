@@ -33,7 +33,6 @@
 #include <vector>
 #include <opencv2/core/ocl.hpp>
 
-
 using namespace std;
 using namespace cv;
 
@@ -42,8 +41,8 @@ namespace ORB_SLAM2 {
 static float Distance(const Point2f& pt, const LineSegment& edge);
 static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2f& C, const Point2f& D);
 static float ChamferDist(const LineSegment& hypothesisEdge,
-        const vector<LineSegment>& actualEdges,
-        int numSamples = 10);
+                         const vector<LineSegment>& actualEdges,
+                         int numSamples = 10);
 static void RollPitchYawFromRotation(const Mat& rot, float& roll, float& pitch, float& yaw);
 static Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw);
 static float AlignmentError(const Point2f& pt, const LineSegment& edge);
@@ -869,7 +868,9 @@ void LocalMapping::FindLandmarks()
         int step = round(object.bbox.width / 10.0);
         int resolution = min(20, step);
         // Sample corner on the top boundary.
-        for (float sampleX = object.bbox.x + 5; sampleX < object.bbox.x + object.bbox.width - 5; sampleX += resolution) {
+        for (float sampleX = object.bbox.x + 5;
+             sampleX < object.bbox.x + object.bbox.width - 5;
+             sampleX += resolution) {
             proposalCorners[0] = Point2f(sampleX, object.bbox.y);
             // Sample the landmark yaw in 360 degrees.
             for (float l_yaw = yaw_init - 45.0 / 180 * M_PI;
@@ -947,8 +948,9 @@ void LocalMapping::FindLandmarks()
                             isCornerVisible[5] = true;
                             isCornerVisible[6] = true;
                             isCornerVisible[7] = false;
-                        } else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
-                                   (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
+                        }
+                        else if ((vp1_homo.x > object.bbox.x && vp1_homo.x < object.bbox.x + object.bbox.width) ||
+                                 (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width)) {
                             if (vp2_homo.x > object.bbox.x && vp2_homo.x < object.bbox.x + object.bbox.width) {
                                 swap(vp1_homo, vp2_homo);
                             }
@@ -961,7 +963,8 @@ void LocalMapping::FindLandmarks()
                                 }
                                 proposalCorners[3] = LineIntersection(vp2_homo, proposalCorners[1], topRight,
                                                                       botRight);
-                            } else if (vp2_homo.x > object.bbox.x + object.bbox.width){
+                            }
+                            else if (vp2_homo.x > object.bbox.x + object.bbox.width) {
                                 // 2 faces
                                 proposalCorners[1] = LineIntersection(vp1_homo, proposalCorners[0], topRight,
                                                                       botRight);
@@ -1006,7 +1009,8 @@ void LocalMapping::FindLandmarks()
                             isCornerVisible[5] = false;
                             isCornerVisible[6] = true;
                             isCornerVisible[7] = false;
-                        } else {
+                        }
+                        else {
                             continue;
                         }
 
@@ -1025,7 +1029,8 @@ void LocalMapping::FindLandmarks()
                         weight_sum += 11.5;
                         if (isCornerVisible[5]) {
                             distErr += 2 / ChamferDist(make_pair(proposalCorners[2], proposalCorners[5]), segsInBbox);
-                            distErr += 3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
+                            distErr +=
+                                    3 / 2 / ChamferDist(make_pair(proposalCorners[4], proposalCorners[5]), segsInBbox);
                             weight_sum += 3.5;
                         }
                         distErr = weight_sum / distErr;
@@ -1033,7 +1038,7 @@ void LocalMapping::FindLandmarks()
                         // Angle alignment error.
                         float err_sum[3] = {};
                         int err_cnt[3] = {};
-                        for (const auto &seg : segsInBbox) {
+                        for (const auto& seg : segsInBbox) {
                             float err1 = AlignmentError(Point2f(vp1.at<float>(0), vp1.at<float>(1)), seg);
                             float err2 = AlignmentError(Point2f(vp2.at<float>(0), vp2.at<float>(1)), seg);
                             float err3 = AlignmentError(Point2f(vp3.at<float>(0), vp3.at<float>(1)), seg);
@@ -1133,11 +1138,13 @@ void LocalMapping::FindLandmarks()
             // Sum the errors by weight.
             float normDistErr = (distErrs[i] - minDistErr) / (maxDistErr - minDistErr);
             float normAlignErr = (alignErrs[i] - minAlignErr) / (maxAlignErr - minAlignErr);
-            float totalErr = (normDistErr + mAlignErrWeight * normAlignErr) / (1 + mAlignErrWeight) + mShapeErrWeight * shapeErrs[i];
+            float totalErr = (normDistErr + mAlignErrWeight * normAlignErr) / (1 + mAlignErrWeight)
+                             + mShapeErrWeight * shapeErrs[i];
             if (totalErr < bestErr || bestErr == -1) {
                 bestErr = totalErr;
                 bestProposal = i;
-                std::cout << normDistErr << ' ' << normAlignErr << ' ' << shapeErrs[i] << ' ' << distErrs[i] << ' ' << alignErrs[i] << std::endl;
+                std::cout << normDistErr << ' ' << normAlignErr << ' ' << shapeErrs[i] << ' ' << distErrs[i] << ' '
+                          << alignErrs[i] << std::endl;
             }
         }
         vector<Point2f> bestProposalCorners = candidates[bestProposal];
@@ -1172,17 +1179,15 @@ void LocalMapping::FindLandmarks()
                 includedMapPoints.emplace_back(mapPoint);
             }
         }
-        Mat worldAvgPos;
+        Mat worldAvgPos = (Mat_<float>(4, 1, CV_32F) << 0, 0, 0, 1);
         for (auto mapPoint : includedMapPoints) {
-            worldAvgPos += mapPoint->GetWorldPos();
+            worldAvgPos.rowRange(0, 3) += mapPoint->GetWorldPos();
         }
-        worldAvgPos /= includedMapPoints.size();
+        worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        Mat centroid = (Mat_<float>(3, 1) <<
-                                          object.bbox.x + (object.bbox.width >> 1),
-                object.bbox.y + (object.bbox.height >> 1),
-                1);
+        Mat centroid = (Mat_<float>(3, 1)
+                << object.bbox.x + (object.bbox.width >> 1), object.bbox.y + (object.bbox.height >> 1), 1);
         centroid = invK * centroid;
         centroid *= avgDepth / centroid.at<float>(3, 3);
         // TODO: Recover the dimension of the landmark with the centroid and the proposal.
@@ -1274,8 +1279,8 @@ static Point2f LineIntersection(const Point2f& A, const Point2f& B, const Point2
     }
 }
 
-static float ChamferDist(const LineSegment &hypothesis,
-                         const vector<LineSegment> &actualEdges,
+static float ChamferDist(const LineSegment& hypothesis,
+                         const vector<LineSegment>& actualEdges,
                          int numSamples)
 {
     float dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
