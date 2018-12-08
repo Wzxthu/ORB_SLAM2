@@ -137,5 +137,5 @@ add_executable(mono_euroc
 Examples/Monocular/mono_euroc.cc)
 target_link_libraries(mono_euroc ${PROJECT_NAME})
 
-add_executable(cubeslam_test test/cubeslam_test.cc)
+add_executable(cubeslam_test test/CubeslamTest.cc)
 target_link_libraries(cubeslam_test ${PROJECT_NAME})

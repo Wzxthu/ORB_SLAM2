@@ -782,10 +782,6 @@ void LocalMapping::FindLandmarks()
     const auto invR = R.t();
     const auto invK = K.inv();
 
-    // Compute camera roll and pitch.
-    float c_roll, c_pitch, c_yaw;
-    RollPitchYawFromRotation(mpCurrentKeyFrame->GetPose(), c_roll, c_pitch, c_yaw);
-
     // Compute the projection of the landmark centers for removing redundant objects.
     vector<Point2f> projCenters;
     projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
@@ -832,29 +828,27 @@ void LocalMapping::FindLandmarks()
 
         // Find landmarks with respect to the detected objects.
         Mat bestRlw, bestInvRlw;
-        float bestErr;
-        CuboidProposal bestProposal = FindBestProposal(bbox, c_yaw, c_roll, c_pitch,
+        CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                        mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                                       segsInBbox, K,
-                                                       bestErr,
+                                                       0, 0, 0,
                                                        mpCurrentKeyFrame->mnFrameId, mpCurrentKeyFrame->mImColor);
 
-        if (bestErr == -1)
+        if (bestProposal.Rlc.empty())
             continue;
         {
             // Draw cuboid proposal
-            line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[0], bestProposal.corners[1], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[1], bestProposal.corners[3], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[3], bestProposal.corners[2], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[2], bestProposal.corners[0], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[0], bestProposal.corners[7], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[1], bestProposal.corners[6], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[2], bestProposal.corners[5], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[3], bestProposal.corners[4], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[7], bestProposal.corners[6], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[6], bestProposal.corners[4], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[4], bestProposal.corners[5], Scalar(0, 255, 0), 2, CV_AA);
+            line(canvas, bestProposal.corners[5], bestProposal.corners[7], Scalar(0, 255, 0), 2, CV_AA);
         }
 
         // Reason the pose and dimension of the landmark from the best proposal.

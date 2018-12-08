@@ -151,6 +151,8 @@ void ObjectDetector::Detect(const cv::Mat& im, vector<Object>& objects)
             cerr << "WARNING: Image input to the network changes."
                     " Due to the current implementation of OpenCV, the network needs reinitializing." << endl;
             mNet = readNetFromDarknet(mCfgFile, mWeightFile);
+            mInputWidth = inputWidth;
+            mInputHeight = inputHeight;
         }
     } else {
         mInputWidth = inputWidth;

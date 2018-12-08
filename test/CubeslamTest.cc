@@ -13,12 +13,14 @@ int main()
             "data/cubeslam_test_example_0.jpg",
             "data/cubeslam_test_example_1.jpg",
             "data/cubeslam_test_example_2.png",
+            "data/cubeslam_test_example_3.png",
     };
 
     string testInfoPaths[] {
             "data/cubeslam_test_example_0_info.txt",
             "data/cubeslam_test_example_1_info.txt",
             "data/cubeslam_test_example_2_info.txt",
+            "data/cubeslam_test_example_3_info.txt",
     };
 
     const float alignErrWeight = 0.7, shapeErrWeight = 2.5, shapeErrThresh = 2.f;
@@ -27,6 +29,8 @@ int main()
                                              .45, .6, 224 * 224);
     auto lineSegDetector = new ORB_SLAM2::LineSegmentDetector();
 
+    using namespace chrono;
+    high_resolution_clock::time_point t1 = high_resolution_clock::now();
     for (int i = 0; i < sizeof(testImgPaths) / sizeof(string); ++i) {
         auto img = imread(testImgPaths[i]);
         Mat canvas = img.clone();
@@ -43,13 +47,13 @@ int main()
         }
 
         // TODO: Load camera roll, pitch, yaw and intrinsics for different test images.
-        float c_roll, c_pitch, c_yaw;
+//        float c_roll, c_pitch, c_yaw;
         Mat K(3, 3, CV_32F);
         ifstream fin(testInfoPaths[i]);
         for (int r = 0; r < 3; ++r)
             for (int c = 0; c < 3; ++c)
                 fin >> K.at<float>(r, c);
-        fin >> c_roll >> c_pitch >> c_yaw;
+//        fin >> c_roll >> c_pitch >> c_yaw;
 
         for (auto& object : objects2D) {
             auto& bbox = object.bbox;
@@ -74,35 +78,29 @@ int main()
 
             // Find landmarks with respect to the detected objects.
             Mat bestRlw, bestInvRlw;
-            float bestErr;
-            CuboidProposal bestProposal = FindBestProposal(bbox, c_yaw, c_roll, c_pitch,
+            CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                            shapeErrThresh, shapeErrWeight, alignErrWeight,
-                                                           segsInBbox, K,
-                                                           bestErr,
-                                                           0, img);
+                                                           0, 0, 0,
+                                                           0, img, false);
 
-            if (bestErr == -1)
+            if (bestProposal.Rlc.empty())
                 continue;
             {
+                Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
+                cout << object.conf << endl;
+                cout << "Roll=" << theta[0] * 180 / M_PI << " Pitch=" << theta[1] * 180 / M_PI << " Yaw=" << theta[2] * 180 / M_PI << endl;
+
                 // Draw cuboid proposal
-                line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-                line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
+                DrawProposal(canvas, bestProposal);
             }
         }
 
         imshow("test_" + to_string(i), canvas);
         waitKey(0);
     }
+    high_resolution_clock::time_point t2 = high_resolution_clock::now();
+    duration<double> timeSpan = duration_cast<duration<double>>(t2 - t1);
+    cout << "Finding landmarks took " << timeSpan.count() << " seconds." << endl;
 
     return 0;
 }
