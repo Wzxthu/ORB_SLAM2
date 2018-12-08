@@ -45,6 +45,7 @@ public:
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
     cv::Point2f GetProjectedCenter(const cv::Mat& Tcw);
+    std::unordered_map<int, cv::Point2f> bboxCenter;
 public:
     int classIdx;
     int landmarkID;
