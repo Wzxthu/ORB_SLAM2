@@ -93,18 +93,18 @@ ObjectDetector::ObjectDetector(
     }
 }
 
-void ObjectDetector::DrawPred(const Object& obj, cv::Mat& frame)
+void ObjectDetector::DrawPred(Mat& frame, const Object& obj)
 {
-    DrawPred(obj.classIdx, obj.conf, obj.bbox, frame);
+    DrawPred(frame, obj.bbox, obj.classIdx, obj.conf);
 }
 
-void ObjectDetector::DrawPred(int classId, float conf, cv::Rect bbox, cv::Mat& frame)
+void ObjectDetector::DrawPred(Mat& frame, cv::Rect bbox, int classId, float conf)
 {
-    DrawPred(classId, conf, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height, frame);
+    DrawPred(frame, bbox.x, bbox.y, bbox.x + bbox.width, bbox.y + bbox.height, classId, conf);
 }
 
 // Draw the predicted bounding box
-void ObjectDetector::DrawPred(int classId, float conf, int left, int top, int right, int bottom, Mat& frame)
+void ObjectDetector::DrawPred(Mat& frame, int left, int top, int right, int bottom, int classId, float conf)
 {
     //Draw a rectangle displaying the bounding box
     rectangle(frame, Point(left, top), Point(right, bottom), Scalar(255, 0, 0), 2);
@@ -197,15 +197,12 @@ void ObjectDetector::Postprocess(const Mat& im, const vector<Mat>& outs, vector<
             // Get the value and location of the maximum score
             minMaxLoc(scores, nullptr, &confidence, nullptr, &classIdPoint);
             if (confidence > mConfThresh) {
-//                cout << data[0] << ' ' << data[1] << ' ' << data[2] << ' ' << data[3] << endl;
                 int centerX = (int) (data[0] * im.cols);
                 int centerY = (int) (data[1] * im.rows);
                 int width = (int) (data[2] * widthRatio);
                 int height = (int) (data[3] * heightRatio);
                 int left = centerX - width / 2;
                 int top = centerY - height / 2;
-
-//                cout << "BBox size: " << height << ' ' << width << endl;
 
                 classIds.push_back(classIdPoint.x);
                 confidences.push_back((float) confidence);

@@ -790,10 +790,11 @@ void LocalMapping::FindLandmarks()
     }
 
     t1 = high_resolution_clock::now();
-    for (auto& object : objects2D) {
+    for (int objId = 0; objId < objects2D.size(); ++objId) {
+        const auto object = objects2D[objId];
         auto& bbox = object.bbox;
         // draw bbox
-        rectangle(canvas, bbox, Scalar(255, 0, 0), 2, CV_AA);
+        ObjectDetector::DrawPred(canvas, object);
 
         // Ignore the bounding box that goes outside the frame.
         if (bbox.x < 0 || bbox.y < 0
@@ -830,25 +831,20 @@ void LocalMapping::FindLandmarks()
         Mat bestRlw, bestInvRlw;
         CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                        mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                                       0, 0, 0,
-                                                       mpCurrentKeyFrame->mnFrameId, mpCurrentKeyFrame->mImColor);
+                                                       0, 0,
+                                                       mpCurrentKeyFrame->mnFrameId, objId,
+                                                       mpCurrentKeyFrame->mImColor);
 
-        if (bestProposal.Rlc.empty())
+        if (!bestProposal.valid)
             continue;
         {
+            Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
+            cout << object.conf << endl;
+            cout << "Roll=" << theta[0] * 180 / M_PI << " Pitch=" << theta[1] * 180 / M_PI << " Yaw="
+                 << theta[2] * 180 / M_PI << endl;
+
             // Draw cuboid proposal
-            line(canvas, bestProposal.corners[0], bestProposal.corners[1], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[1], bestProposal.corners[3], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[3], bestProposal.corners[2], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[2], bestProposal.corners[0], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[0], bestProposal.corners[7], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[1], bestProposal.corners[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[2], bestProposal.corners[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[3], bestProposal.corners[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[7], bestProposal.corners[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[6], bestProposal.corners[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[4], bestProposal.corners[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal.corners[5], bestProposal.corners[7], Scalar(0, 255, 0), 2, CV_AA);
+            DrawCuboidProposal(canvas, bestProposal, bbox, K);
         }
 
         // Reason the pose and dimension of the landmark from the best proposal.

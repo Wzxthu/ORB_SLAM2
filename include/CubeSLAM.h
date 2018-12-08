@@ -13,6 +13,7 @@ struct CuboidProposal {
     cv::Mat Rlc;
     cv::Point2f corners[8];
     bool isCornerVisible[8]{true, true, true, true};
+    bool valid = false;
 
     friend std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal);
 
@@ -20,6 +21,7 @@ struct CuboidProposal {
 
     inline CuboidProposal(const CuboidProposal& other)
     {
+        valid = other.valid;
         Rlc = other.Rlc.clone();
         memcpy(corners, other.corners, sizeof(corners));
         memcpy(isCornerVisible, other.isCornerVisible, sizeof(isCornerVisible));
@@ -37,24 +39,23 @@ inline std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposa
 
 inline cv::Point2f Point2FromHomo(const cv::Mat& homo)
 {
+    const float RANGE = 1000000;
     const float X = homo.at<float>(0, 0);
     const float Y = homo.at<float>(1, 0);
     const float Z = homo.at<float>(2, 0);
     const float absZ = fabs(Z);
-//    std::cout << X << ' ' << Y << ' ' << Z << ' ' << X / Z << ' ' << Y / Z << "?????" << std::endl;
     if (absZ >= 1)
         return cv::Point2f(X / Z, Y / Z);
     const float maxAbsXY = std::max(fabs(homo.at<float>(0)), fabs(homo.at<float>(1)));
-    if (maxAbsXY < FLT_MAX * absZ)
+    if (maxAbsXY < RANGE * absZ)
         return cv::Point2f(X / Z, Y / Z);
-//    std::cout << maxAbsXY << ' ' << absZ << ' ' << FLT_MAX << "!!!!!" << std::endl;
     if (fabs(X) > fabs(Y)) {
-        const float x = X > 0 ? FLT_MAX : -FLT_MIN;
+        const float x = X > 0 ? RANGE : -RANGE;
         const float y = x * (Y / X);
         return cv::Point2f(x, y);
     }
     else {
-        const float y = Y > 0 ? FLT_MAX : -FLT_MIN;
+        const float y = Y > 0 ? RANGE : -RANGE;
         const float x = y * (X / Y);
         return cv::Point2f(x, y);
     }
@@ -281,45 +282,111 @@ inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
     return angle;
 }
 
-inline void DrawProposal(cv::Mat& canvas, const CuboidProposal& proposal)
+inline void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                               const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255))
 {
-    cv::line(canvas, proposal.corners[0], proposal.corners[1], cv::Scalar(0, 255, 0),
+    cv::Mat vp1Homo = K * proposal.Rlc.col(0);
+    cv::Mat vp3Homo = K * proposal.Rlc.col(1);
+    cv::Mat vp2Homo = K * proposal.Rlc.col(2);
+    cv::Point2f vp1 = Point2FromHomo(vp1Homo);
+    cv::Point2f vp2 = Point2FromHomo(vp2Homo);
+    cv::Point2f vp3 = Point2FromHomo(vp3Homo);
+
+    cv::line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
              1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
-    cv::line(canvas, proposal.corners[1], proposal.corners[3], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
              1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
-    cv::line(canvas, proposal.corners[3], proposal.corners[2], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
              1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
-    cv::line(canvas, proposal.corners[2], proposal.corners[0], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
              1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
-    cv::line(canvas, proposal.corners[0], proposal.corners[7], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
              1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
-    cv::line(canvas, proposal.corners[1], proposal.corners[6], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
              1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
-    cv::line(canvas, proposal.corners[2], proposal.corners[5], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
              1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
-    cv::line(canvas, proposal.corners[3], proposal.corners[4], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
              1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
-    cv::line(canvas, proposal.corners[7], proposal.corners[6], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
              1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
-    cv::line(canvas, proposal.corners[6], proposal.corners[4], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
              1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
-    cv::line(canvas, proposal.corners[4], proposal.corners[5], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
              1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
-    cv::line(canvas, proposal.corners[5], proposal.corners[7], cv::Scalar(0, 255, 0),
+    cv::line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
              1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
 
-    for (int i = 0; i < 8; ++i) {
+    cv::line(canvas, vp1, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(0, 0, 255), 4);
+    cv::line(canvas, vp2, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(0, 255, 0), 4);
+    cv::line(canvas, vp3, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(255, 0, 0), 4);
+
+    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[1])
+        cv::line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
+                 1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
+    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[3])
+        cv::line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
+                 1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
+    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[2])
+        cv::line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
+                 1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
+    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[0])
+        cv::line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
+                 1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
+    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[7])
+        cv::line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
+                 1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
+    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[6])
+        cv::line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
+                 1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
+    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[5])
+        cv::line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
+                 1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
+    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[4])
+        cv::line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
+                 1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
+    if (proposal.isCornerVisible[7] && proposal.isCornerVisible[6])
+        cv::line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
+                 1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
+    if (proposal.isCornerVisible[6] && proposal.isCornerVisible[4])
+        cv::line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
+                 1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
+    if (proposal.isCornerVisible[4] && proposal.isCornerVisible[5])
+        cv::line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
+                 1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
+    if (proposal.isCornerVisible[5] && proposal.isCornerVisible[7])
+        cv::line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
+                 1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
+
+    cv::line(canvas, vp1, proposal.corners[0], cv::Scalar(0, 0, 255));
+    cv::line(canvas, vp1, proposal.corners[2], cv::Scalar(0, 0, 255));
+    cv::line(canvas, vp1, proposal.corners[5], cv::Scalar(0, 0, 255));
+    cv::line(canvas, vp1, proposal.corners[7], cv::Scalar(0, 0, 255));
+    cv::line(canvas, vp2, proposal.corners[0], cv::Scalar(0, 255, 0));
+    cv::line(canvas, vp2, proposal.corners[1], cv::Scalar(0, 255, 0));
+    cv::line(canvas, vp2, proposal.corners[6], cv::Scalar(0, 255, 0));
+    cv::line(canvas, vp2, proposal.corners[7], cv::Scalar(0, 255, 0));
+    cv::line(canvas, vp3, proposal.corners[4], cv::Scalar(255, 0, 0));
+    cv::line(canvas, vp3, proposal.corners[5], cv::Scalar(255, 0, 0));
+    cv::line(canvas, vp3, proposal.corners[6], cv::Scalar(255, 0, 0));
+    cv::line(canvas, vp3, proposal.corners[7], cv::Scalar(255, 0, 0));
+
+    for (int i = 7; i >= 0; --i) {
         cv::putText(canvas, std::to_string(i), proposal.corners[i],
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5f, cv::Scalar(0, 0, 0), 4);
+                    cv::FONT_HERSHEY_SIMPLEX, 0.5f, cv::Scalar(0, 0, 0), 8);
         cv::putText(canvas, std::to_string(i), proposal.corners[i],
                     cv::FONT_HERSHEY_SIMPLEX, 0.5f, cv::Scalar(255, 255, 255), 2);
     }
 }
 
-CuboidProposal FindBestProposal(cv::Rect bbox, std::vector<LineSegment*> lineSegs, cv::Mat K,
+CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
+                                      const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
+
+CuboidProposal FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
                                 float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
-                                float initRoll, float initPitch, float initYaw,
-                                float frameId = 0, cv::Mat image = cv::Mat(), bool display = false, bool save = false);
+                                float refRoll, float refPitch,
+                                int frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
+                                bool display = false, bool save = false);
 
 }
 
