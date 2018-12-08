@@ -44,7 +44,7 @@ public:
     cv::Mat GetLandmarkCenter();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
-    cv::Point2f GetProjectedCenter(const cv::Mat& Tcw);
+    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
     std::unordered_map<int, cv::Point2f> bboxCenter;
 public:
     int classIdx;

@@ -1,3 +1,24 @@
+/**
+ * This file is part of CubeSLAM.
+ *
+ * Copyright (C) 2018, Carnegie Mellon University
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
 #ifndef CUBESLAM_H
 #define CUBESLAM_H
 
@@ -9,12 +30,68 @@
 namespace ORB_SLAM2 {
 
 // Represent the cuboid proposal with the coordinates in frame of the 8 corners.
-typedef std::array<cv::Point2f, 8> CuboidProposal;
+struct CuboidProposal {
+    cv::Mat Rlc;
+    cv::Point2f corners[8];
+    bool isCornerVisible[8]{true, true, true, true};
+    bool valid = false;
+
+    friend std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal);
+
+    inline CuboidProposal() = default;
+
+    inline CuboidProposal(const CuboidProposal& other)
+    {
+        valid = other.valid;
+        Rlc = other.Rlc.clone();
+        memcpy(corners, other.corners, sizeof(corners));
+        memcpy(isCornerVisible, other.isCornerVisible, sizeof(isCornerVisible));
+    }
+};
+
+inline std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal)
+{
+    out << '[';
+    for (int i = 0; i < 7; ++i)
+        out << proposal.corners[i] << ',';
+    out << proposal.corners[7] << ']';
+    return out;
+}
+
+inline cv::Point2f Point2FromHomo(const cv::Mat& homo)
+{
+    const float RANGE = 1000000;
+    const float X = homo.at<float>(0, 0);
+    const float Y = homo.at<float>(1, 0);
+    const float Z = homo.at<float>(2, 0);
+    const float absZ = fabs(Z);
+    if (absZ >= 1)
+        return cv::Point2f(X / Z, Y / Z);
+    const float maxAbsXY = std::max(fabs(homo.at<float>(0)), fabs(homo.at<float>(1)));
+    if (maxAbsXY < RANGE * absZ)
+        return cv::Point2f(X / Z, Y / Z);
+    if (fabs(X) > fabs(Y)) {
+        const float x = X > 0 ? RANGE : -RANGE;
+        const float y = x * (Y / X);
+        return cv::Point2f(x, y);
+    }
+    else {
+        const float y = Y > 0 ? RANGE : -RANGE;
+        const float x = y * (X / Y);
+        return cv::Point2f(x, y);
+    }
+}
 
 template<class T>
 inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
 {
     return powf(pt1.x - pt2.x, 2) + powf(pt1.y - pt2.y, 2);
+}
+
+template<class T1, class T2>
+inline bool inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
+{
+    return pt.x >= bbox.x && pt.x <= bbox.x + bbox.width && pt.y >= bbox.y && pt.y <= bbox.y + bbox.height;
 }
 
 template<class T>
@@ -74,6 +151,18 @@ inline float ChamferDist(const LineSegment& hypothesis,
     return chamferDist;
 }
 
+template<class T1, class T2>
+inline cv::Point_<T1> LineIntersectionX(const cv::Point_<T1>& A, const cv::Point_<T1>& B, T2 x)
+{
+    return cv::Point_<T1>(x, A.y + (B.y - A.y) * (x - A.x) / (B.x - A.x));
+}
+
+template<class T1, class T2>
+inline cv::Point_<T1> LineIntersectionY(const cv::Point_<T1>& A, const cv::Point_<T1>& B, T2 y)
+{
+    return cv::Point_<T1>(A.x + (B.x - A.x) * (y - A.y) / (B.y - A.y), y);
+}
+
 template<class T>
 inline cv::Point_<T>
 LineIntersection(const cv::Point_<T>& A, const cv::Point_<T>& B, const cv::Point_<T>& C, const cv::Point_<T>& D)
@@ -102,26 +191,66 @@ LineIntersection(const cv::Point_<T>& A, const cv::Point_<T>& B, const cv::Point
     }
 }
 
-inline void RollPitchYawFromRotation(const cv::Mat& rot, float& roll, float& pitch, float& yaw)
+// Checks if a matrix is a valid rotation matrix.
+inline bool IsRotationMatrix(const cv::Mat& R)
 {
-    roll = atan2(rot.at<float>(2, 1), rot.at<float>(2, 2));
-    pitch = atan2(-rot.at<float>(2, 0), sqrt(powf(rot.at<float>(2, 1), 2) + powf(rot.at<float>(2, 2), 2)));
-    yaw = atan2(rot.at<float>(1, 0), rot.at<float>(0, 0));
+    cv::Mat Rt;
+    cv::transpose(R, Rt);
+    cv::Mat shouldBeIdentity = Rt * R;
+    cv::Mat I = cv::Mat::eye(3, 3, shouldBeIdentity.type());
+
+    return cv::norm(I, shouldBeIdentity) < 1e-6;
 }
 
-inline cv::Mat RotationFromRollPitchYaw(float roll, float pitch, float yaw)
+inline cv::Vec3f EulerAnglesFromRotation(const cv::Mat& R)
 {
-    cv::Mat rot(3, 3, CV_32F);
-    rot.at<float>(0, 0) = cos(yaw) * cos(pitch);
-    rot.at<float>(0, 1) = cos(yaw) * sin(pitch) * sin(roll) - sin(yaw) * cos(roll);
-    rot.at<float>(0, 2) = cos(yaw) * sin(pitch) * cos(roll) + sin(yaw) * sin(roll);
-    rot.at<float>(1, 0) = sin(yaw) * cos(pitch);
-    rot.at<float>(1, 1) = sin(yaw) * sin(pitch) * sin(roll) + cos(yaw) * cos(roll);
-    rot.at<float>(1, 2) = sin(yaw) * sin(pitch) * cos(roll) - cos(yaw) * sin(roll);
-    rot.at<float>(2, 0) = -sin(pitch);
-    rot.at<float>(2, 1) = cos(pitch) * sin(roll);
-    rot.at<float>(2, 2) = cos(pitch) * cos(roll);
-    return rot;
+    assert(IsRotationMatrix(R));
+
+    float sy = sqrtf(R.at<float>(0, 0) * R.at<float>(0, 0) + R.at<float>(1, 0) * R.at<float>(1, 0));
+
+    bool singular = sy < 1e-6; // If
+
+    float roll, pitch, yaw;
+    if (!singular) {
+        roll = atan2(R.at<float>(2, 1), R.at<float>(2, 2));
+        pitch = atan2(-R.at<float>(2, 0), sy);
+        yaw = atan2(R.at<float>(1, 0), R.at<float>(0, 0));
+    }
+    else {
+        roll = atan2(-R.at<float>(1, 2), R.at<float>(1, 1));
+        pitch = atan2(-R.at<float>(2, 0), sy);
+        yaw = 0;
+    }
+    return cv::Vec3f(roll, pitch, yaw);
+}
+
+inline cv::Mat EulerAnglesToRotationMatrix(const cv::Vec3f& theta)
+{
+    // Calculate rotation about x axis
+    cv::Mat R_x = (cv::Mat_<float>(3, 3)
+            << 1, 0, 0,
+            0, cos(theta[0]), -sin(theta[0]),
+            0, sin(theta[0]), cos(theta[0])
+    );
+
+    // Calculate rotation about y axis
+    cv::Mat R_y = (cv::Mat_<float>(3, 3)
+            << cos(theta[1]), 0, sin(theta[1]),
+            0, 1, 0,
+            -sin(theta[1]), 0, cos(theta[1])
+    );
+
+    // Calculate rotation about z axis
+    cv::Mat R_z = (cv::Mat_<float>(3, 3)
+            << cos(theta[2]), -sin(theta[2]), 0,
+            sin(theta[2]), cos(theta[2]), 0,
+            0, 0, 1);
+
+    // Combined rotation matrix
+    cv::Mat R = R_z * R_y * R_x;
+
+    return R;
+
 }
 
 inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
@@ -135,13 +264,17 @@ inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
     return angle;
 }
 
-CuboidProposal FindBestProposal(cv::Rect bbox, float c_yaw, float c_roll, float c_pitch,
+void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                        const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
+
+CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
+                                      const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
+
+CuboidProposal FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
                                 float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
-                                std::vector<LineSegment*> lineSegs,
-                                cv::Mat K,
-                                float& bestErr,
-                                float frameId = 0,
-                                cv::Mat image = cv::Mat());
+                                float refRoll, float refPitch,
+                                int frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
+                                bool display = false, bool save = false);
 
 }
 

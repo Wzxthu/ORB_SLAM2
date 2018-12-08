@@ -202,7 +202,7 @@ void FrameDrawer::UpdateKeyframe(const KeyFrame* keyFrame, const vector<Object>&
     unique_lock<mutex> lock(mMutex);
     mKeyframeIm = keyFrame->mImColor.clone();
     for (const auto& obj : objects2D) {
-        ObjectDetector::DrawPred(obj.classIdx, obj.conf, obj.bbox, mKeyframeIm);
+        ObjectDetector::DrawPred(mKeyframeIm, obj.bbox, obj.classIdx, obj.conf);
     }
 
     mpLandmarks = keyFrame->mpLandmarks;

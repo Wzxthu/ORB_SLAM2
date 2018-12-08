@@ -782,22 +782,36 @@ void LocalMapping::FindLandmarks()
     const auto invR = R.t();
     const auto invK = K.inv();
 
-    // Compute camera roll and pitch.
-    float c_roll, c_pitch, c_yaw;
-    RollPitchYawFromRotation(mpCurrentKeyFrame->GetPose(), c_roll, c_pitch, c_yaw);
-
     // Compute the projection of the landmark centers for removing redundant objects.
     vector<Point2f> projCenters;
     projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
     for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
-        projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
+        projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose()));
     }
 
+    // Compute camera roll and pitch from landmarks seen from previous frames.
+    // TODO: Need checking here.
+    float cameraRoll = -M_PI, cameraPitch = 0;
+    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+        Mat Rlc = pLandmark->GetPose() * mpCurrentKeyFrame->GetPoseInverse();
+        auto theta = EulerAnglesFromRotation(Rlc);
+        cameraRoll += theta[0];
+        cameraPitch += theta[1];
+    }
+    cameraRoll /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
+    cameraPitch /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
+
     t1 = high_resolution_clock::now();
-    for (auto& object : objects2D) {
+    for (int objId = 0; objId < objects2D.size(); ++objId) {
+        const auto object = objects2D[objId];
         auto& bbox = object.bbox;
+
+        // Ignore objects that are too small.
+        if (bbox.width <= 96 || bbox.height <= 96)
+            continue;
+
         // draw bbox
-        rectangle(canvas, bbox, Scalar(255, 0, 0), 2, CV_AA);
+        ObjectDetector::DrawPred(canvas, object);
 
         // Ignore the bounding box that goes outside the frame.
         if (bbox.x < 0 || bbox.y < 0
@@ -837,29 +851,22 @@ void LocalMapping::FindLandmarks()
 
         // Find landmarks with respect to the detected objects.
         Mat bestRlw, bestInvRlw;
-        float bestErr;
-        CuboidProposal bestProposal = FindBestProposal(bbox, c_yaw, c_roll, c_pitch,
+        CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                        mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                                       segsInBbox, K,
-                                                       bestErr,
-                                                       mpCurrentKeyFrame->mnFrameId, mpCurrentKeyFrame->mImColor);
+                                                       cameraRoll, cameraPitch,
+                                                       mpCurrentKeyFrame->mnFrameId, objId,
+                                                       mpCurrentKeyFrame->mImColor, false, true);
 
-        if (bestErr == -1)
+        if (!bestProposal.valid)
             continue;
         {
+            Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
+            cout << object.conf << endl;
+            cout << "Roll=" << theta[0] * 180 / M_PI << " Pitch=" << theta[1] * 180 / M_PI << " Yaw="
+                 << theta[2] * 180 / M_PI << endl;
+
             // Draw cuboid proposal
-            line(canvas, bestProposal[0], bestProposal[1], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[3], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[2], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[0], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[0], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[1], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[2], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[3], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[7], bestProposal[6], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[6], bestProposal[4], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[4], bestProposal[5], Scalar(0, 255, 0), 2, CV_AA);
-            line(canvas, bestProposal[5], bestProposal[7], Scalar(0, 255, 0), 2, CV_AA);
+            DrawCuboidProposal(canvas, bestProposal, bbox, K);
         }
 
         // Reason the pose and dimension of the landmark from the best proposal.
@@ -880,8 +887,7 @@ void LocalMapping::FindLandmarks()
         worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        Mat centroid = (Mat_<float>(3, 1)
-                << bbox.x + (bbox.width >> 1), bbox.y + (bbox.height >> 1), 1);
+        Mat centroid = (Mat_<float>(3, 1) << bbox.x + (bbox.width >> 1), bbox.y + (bbox.height >> 1), 1);
         centroid = invK * centroid;
         centroid *= avgDepth / centroid.at<float>(3, 3);
         // TODO: Recover the dimension of the landmark with the centroid and the proposal.

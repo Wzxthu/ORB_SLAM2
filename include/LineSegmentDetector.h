@@ -17,16 +17,28 @@
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
 
+#pragma once
+
 #ifndef LINESEGMENTDETECTOR_H
 #define LINESEGMENTDETECTOR_H
 
 #include <vector>
-
 #include <opencv2/opencv.hpp>
 
 namespace ORB_SLAM2 {
 
+template<typename _Tp> static inline
+float normf(const cv::Point_<_Tp>& pt)
+{
+    return std::sqrtf(pt.x * pt.x + pt.y * pt.y);
+}
+
 typedef std::pair<cv::Point2f, cv::Point2f> LineSegment;
+
+inline float GetLength(const LineSegment& seg)
+{
+    return normf(seg.first - seg.second);
+}
 
 class LineSegmentDetector {
 public:

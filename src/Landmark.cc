@@ -26,12 +26,14 @@ using namespace cv;
 
 namespace ORB_SLAM2 {
 
-void Landmark::SetDimension(const LandmarkDimension& dimension) {
+void Landmark::SetDimension(const LandmarkDimension& dimension)
+{
     unique_lock<mutex> lock(mMutexPose);
     mDimension = dimension;
 }
 
-LandmarkDimension Landmark::GetDimension() {
+LandmarkDimension Landmark::GetDimension()
+{
     unique_lock<mutex> lock(mMutexPose);
     return mDimension;
 }
@@ -43,17 +45,18 @@ void Landmark::SetPose(const Mat& Tlw_)
     Mat Rlw = Tlw.rowRange(0, 3).colRange(0, 3);
     Mat tlw = Tlw.rowRange(0, 3).col(3);
     Mat Rwl = Rlw.t();
-    Lw = -Rwl*tlw;
+    Lw = -Rwl * tlw;
 
     Twl = Mat::eye(4, 4, Tlw.type());
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
-Point2f Landmark::GetProjectedCenter(const Mat& Tcw)
+Point2f Landmark::GetProjectedCentroid(const Mat& Tcw)
 {
-    Mat homo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
-    return Point2f(homo.at<float>(0) / homo.at<float>(2), homo.at<float>(1) / homo.at<float>(2));
+    Mat centroidHomo = Tcw.rowRange(0, 3).colRange(0, 3).dot(GetLandmarkCenter()) + Tcw.rowRange(0, 3).col(3);
+    return Point2f(centroidHomo.at<float>(0) / centroidHomo.at<float>(2),
+                   centroidHomo.at<float>(1) / centroidHomo.at<float>(2));
 }
 
 Mat Landmark::GetPose()
@@ -77,13 +80,13 @@ Mat Landmark::GetLandmarkCenter()
 Mat Landmark::GetRotation()
 {
     unique_lock<mutex> lock(mMutexPose);
-    return Tlw.rowRange(0,3).colRange(0,3).clone();
+    return Tlw.rowRange(0, 3).colRange(0, 3).clone();
 }
 
 Mat Landmark::GetTranslation()
 {
     unique_lock<mutex> lock(mMutexPose);
-    return Tlw.rowRange(0,3).col(3).clone();
+    return Tlw.rowRange(0, 3).col(3).clone();
 }
 
 }
