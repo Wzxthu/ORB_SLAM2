@@ -107,7 +107,8 @@ void ObjectDetector::DrawPred(Mat& frame, cv::Rect bbox, int classId, float conf
 void ObjectDetector::DrawPred(Mat& frame, int left, int top, int right, int bottom, int classId, float conf)
 {
     //Draw a rectangle displaying the bounding box
-    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(255, 0, 0), 2);
+    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(0, 0, 0), 3);
+    rectangle(frame, Point(left, top), Point(right, bottom), Scalar(255, 255, 255), 1);
 
     //Get the label for the class name and its confidence
     string label = format("%.2f", conf);

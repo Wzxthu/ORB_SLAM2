@@ -44,7 +44,7 @@ public:
     cv::Mat GetLandmarkCenter();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
-    cv::Point2f GetProjectedCenter(const cv::Mat& Tcw);
+    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
 public:
     int classIdx;
     int landmarkID;

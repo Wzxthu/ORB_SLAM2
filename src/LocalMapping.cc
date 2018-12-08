@@ -786,13 +786,30 @@ void LocalMapping::FindLandmarks()
     vector<Point2f> projCenters;
     projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
     for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
-        projCenters.emplace_back(pLandmark->GetProjectedCenter(mpCurrentKeyFrame->GetPose()));
+        projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose()));
     }
+
+    // Compute camera roll and pitch from landmarks seen from previous frames.
+    // TODO: Need checking here.
+    float cameraRoll = -M_PI, cameraPitch = 0;
+    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+        Mat Rlc = pLandmark->GetPose() * mpCurrentKeyFrame->GetPoseInverse();
+        auto theta = EulerAnglesFromRotation(Rlc);
+        cameraRoll += theta[0];
+        cameraPitch += theta[1];
+    }
+    cameraRoll /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
+    cameraPitch /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
 
     t1 = high_resolution_clock::now();
     for (int objId = 0; objId < objects2D.size(); ++objId) {
         const auto object = objects2D[objId];
         auto& bbox = object.bbox;
+
+        // Ignore objects that are too small.
+        if (bbox.width <= 96 || bbox.height <= 96)
+            continue;
+
         // draw bbox
         ObjectDetector::DrawPred(canvas, object);
 
@@ -831,9 +848,9 @@ void LocalMapping::FindLandmarks()
         Mat bestRlw, bestInvRlw;
         CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                        mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                                       0, 0,
+                                                       cameraRoll, cameraPitch,
                                                        mpCurrentKeyFrame->mnFrameId, objId,
-                                                       mpCurrentKeyFrame->mImColor);
+                                                       mpCurrentKeyFrame->mImColor, false, true);
 
         if (!bestProposal.valid)
             continue;
@@ -865,8 +882,7 @@ void LocalMapping::FindLandmarks()
         worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        Mat centroid = (Mat_<float>(3, 1)
-                << bbox.x + (bbox.width >> 1), bbox.y + (bbox.height >> 1), 1);
+        Mat centroid = (Mat_<float>(3, 1) << bbox.x + (bbox.width >> 1), bbox.y + (bbox.height >> 1), 1);
         centroid = invK * centroid;
         centroid *= avgDepth / centroid.at<float>(3, 3);
         // TODO: Recover the dimension of the landmark with the centroid and the proposal.

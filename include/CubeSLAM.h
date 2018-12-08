@@ -1,3 +1,24 @@
+/**
+ * This file is part of CubeSLAM.
+ *
+ * Copyright (C) 2018, Carnegie Mellon University
+ *
+ * This program is free software: you can redistribute it and/or modify
+ * it under the terms of the GNU General Public License as published by
+ * the Free Software Foundation, either version 3 of the License, or
+ * (at your option) any later version.
+ *
+ * This program is distributed in the hope that it will be useful,
+ * but WITHOUT ANY WARRANTY; without even the implied warranty of
+ * MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See the
+ * GNU General Public License for more details.
+ *
+ * You should have received a copy of the GNU General Public License
+ * along with this program.  If not, see <http://www.gnu.org/licenses/>.
+ */
+
+#pragma once
+
 #ifndef CUBESLAM_H
 #define CUBESLAM_H
 
@@ -130,45 +151,6 @@ inline float ChamferDist(const LineSegment& hypothesis,
     return chamferDist;
 }
 
-inline std::vector<std::vector<float>> PrecomputeChamferDistMap(const cv::Rect& bbox,
-                                                                const std::vector<LineSegment*>& edges)
-{
-    std::vector<std::vector<float>> distMap(static_cast<unsigned long>(bbox.height + 1),
-                                            std::vector<float>(static_cast<unsigned long>(bbox.width + 1)));
-    int longerSide = std::max(bbox.width, bbox.height);
-    for (int y = 0; y <= bbox.height; ++y) {
-        for (int x = 0; x <= bbox.width; ++x) {
-            cv::Point2f pt(x + bbox.x, y + bbox.y);
-            float& minDist = distMap[y][x];
-            minDist = longerSide;
-            for (auto edge : edges) {
-                float dist = Distance(pt, *edge);
-                if (dist < minDist)
-                    minDist = dist;
-            }
-        }
-    }
-    return distMap;
-}
-
-inline float ChamferDist(const LineSegment& hypothesis,
-                         const cv::Rect& bbox,
-                         const std::vector<std::vector<float>>& distMap,
-                         int numSamples = 10)
-{
-    float dx = (hypothesis.second.x - hypothesis.first.x) / (numSamples - 1);
-    float dy = (hypothesis.second.y - hypothesis.first.y) / (numSamples - 1);
-    float x = hypothesis.first.x - bbox.x;
-    float y = hypothesis.first.y - bbox.y;
-    float chamferDist = 0;
-    for (int i = 0; i < numSamples; ++i) {
-        chamferDist += distMap[int(y)][int(x)];
-        x += dx;
-        y += dy;
-    }
-    return chamferDist;
-}
-
 template<class T1, class T2>
 inline cv::Point_<T1> LineIntersectionX(const cv::Point_<T1>& A, const cv::Point_<T1>& B, T2 x)
 {
@@ -282,102 +264,8 @@ inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
     return angle;
 }
 
-inline void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
-                               const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255))
-{
-    cv::Mat vp1Homo = K * proposal.Rlc.col(0);
-    cv::Mat vp3Homo = K * proposal.Rlc.col(1);
-    cv::Mat vp2Homo = K * proposal.Rlc.col(2);
-    cv::Point2f vp1 = Point2FromHomo(vp1Homo);
-    cv::Point2f vp2 = Point2FromHomo(vp2Homo);
-    cv::Point2f vp3 = Point2FromHomo(vp3Homo);
-
-    cv::line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
-             1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
-    cv::line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
-             1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
-    cv::line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
-             1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
-    cv::line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
-             1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
-    cv::line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
-             1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
-    cv::line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
-             1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
-    cv::line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
-             1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
-    cv::line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
-             1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
-    cv::line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
-             1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
-    cv::line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
-             1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
-    cv::line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
-             1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
-    cv::line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
-             1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
-
-    cv::line(canvas, vp1, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(0, 0, 255), 4);
-    cv::line(canvas, vp2, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(0, 255, 0), 4);
-    cv::line(canvas, vp3, cv::Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), cv::Scalar(255, 0, 0), 4);
-
-    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[1])
-        cv::line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
-                 1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
-    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[3])
-        cv::line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
-                 1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
-    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[2])
-        cv::line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
-                 1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
-    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[0])
-        cv::line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
-                 1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
-    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[7])
-        cv::line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
-                 1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
-    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[6])
-        cv::line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
-                 1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
-    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[5])
-        cv::line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
-                 1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
-    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[4])
-        cv::line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
-                 1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
-    if (proposal.isCornerVisible[7] && proposal.isCornerVisible[6])
-        cv::line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
-                 1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
-    if (proposal.isCornerVisible[6] && proposal.isCornerVisible[4])
-        cv::line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
-                 1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
-    if (proposal.isCornerVisible[4] && proposal.isCornerVisible[5])
-        cv::line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
-                 1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
-    if (proposal.isCornerVisible[5] && proposal.isCornerVisible[7])
-        cv::line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
-                 1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
-
-    cv::line(canvas, vp1, proposal.corners[0], cv::Scalar(0, 0, 255));
-    cv::line(canvas, vp1, proposal.corners[2], cv::Scalar(0, 0, 255));
-    cv::line(canvas, vp1, proposal.corners[5], cv::Scalar(0, 0, 255));
-    cv::line(canvas, vp1, proposal.corners[7], cv::Scalar(0, 0, 255));
-    cv::line(canvas, vp2, proposal.corners[0], cv::Scalar(0, 255, 0));
-    cv::line(canvas, vp2, proposal.corners[1], cv::Scalar(0, 255, 0));
-    cv::line(canvas, vp2, proposal.corners[6], cv::Scalar(0, 255, 0));
-    cv::line(canvas, vp2, proposal.corners[7], cv::Scalar(0, 255, 0));
-    cv::line(canvas, vp3, proposal.corners[4], cv::Scalar(255, 0, 0));
-    cv::line(canvas, vp3, proposal.corners[5], cv::Scalar(255, 0, 0));
-    cv::line(canvas, vp3, proposal.corners[6], cv::Scalar(255, 0, 0));
-    cv::line(canvas, vp3, proposal.corners[7], cv::Scalar(255, 0, 0));
-
-    for (int i = 7; i >= 0; --i) {
-        cv::putText(canvas, std::to_string(i), proposal.corners[i],
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5f, cv::Scalar(0, 0, 0), 8);
-        cv::putText(canvas, std::to_string(i), proposal.corners[i],
-                    cv::FONT_HERSHEY_SIMPLEX, 0.5f, cv::Scalar(255, 255, 255), 2);
-    }
-}
+void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                        const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
 
 CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
                                       const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);

@@ -91,7 +91,7 @@ int main()
             CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                            shapeErrThresh, shapeErrWeight, alignErrWeight,
                                                            -M_PI, 0, objId,
-                                                           0, img, true);
+                                                           0, img, false);
 
             if (!bestProposal.valid)
                 continue;
