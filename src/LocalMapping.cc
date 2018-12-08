@@ -531,11 +531,11 @@ void LocalMapping::SearchInNeighbors()
     auto Rcw_z = kfPose.row(2).colRange(0, 3);
     auto tcw_z = kfPose.at<float>(3, 2);
     for (auto pKFi : vpTargetKFs) {
-        for (const auto& pLandmark : pKFi->mpLandmarks) {
+        for (const auto& pLandmark : pKFi->GetLandmarks()) {
             // See if this landmark is visible in the current keyframe.
-            auto Lc_z = Rcw_z.dot(pLandmark->GetLandmarkCenter()) + tcw_z;
+            auto Lc_z = Rcw_z.dot(pLandmark->GetCentroid()) + tcw_z;
             if (Lc_z > 0) {
-                mpCurrentKeyFrame->mpLandmarks.emplace_back(pLandmark);
+                mpCurrentKeyFrame->AddLandmark(pLandmark);
             }
         }
     }
@@ -784,22 +784,23 @@ void LocalMapping::FindLandmarks()
 
     // Compute the projection of the landmark centers for removing redundant objects.
     vector<Point2f> projCenters;
-    projCenters.reserve(mpCurrentKeyFrame->mpLandmarks.size());
-    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+    auto landmarks = mpCurrentKeyFrame->GetLandmarks();
+    projCenters.reserve(landmarks.size());
+    for (const auto& pLandmark : landmarks) {
         projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose()));
     }
 
     // Compute camera roll and pitch from landmarks seen from previous frames.
     // TODO: Need checking here.
-    float cameraRoll = -M_PI, cameraPitch = 0;
-    for (const auto& pLandmark : mpCurrentKeyFrame->mpLandmarks) {
+    float cameraRoll = static_cast<float>(-M_PI), cameraPitch = 0;
+    for (const auto& pLandmark : landmarks) {
         Mat Rlc = pLandmark->GetPose() * mpCurrentKeyFrame->GetPoseInverse();
         auto theta = EulerAnglesFromRotation(Rlc);
         cameraRoll += theta[0];
         cameraPitch += theta[1];
     }
-    cameraRoll /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
-    cameraPitch /= mpCurrentKeyFrame->mpLandmarks.size() + 1;
+    cameraRoll /= landmarks.size() + 1;
+    cameraPitch /= landmarks.size() + 1;
 
     t1 = high_resolution_clock::now();
     for (int objId = 0; objId < objects2D.size(); ++objId) {
@@ -827,8 +828,8 @@ void LocalMapping::FindLandmarks()
             const auto& center = projCenters[cIdx];
             if (max(center.x - bbox.x, center.y - bbox.y) <= min(bbox.width, bbox.height) >> 2) {
                 seen = true;
-                mpCurrentKeyFrame->mpLandmarks[cIdx]->bboxCenter[mpCurrentKeyFrame->mnFrameId] =
-                        cv::Point2f((bbox.x + bbox.width) / 2, (bbox.y + bbox.height) / 2);
+                landmarks[cIdx]->bboxCenter[mpCurrentKeyFrame->mnFrameId] =
+                        cv::Point2f(bbox.x + bbox.width * .5f, bbox.y + bbox.height * .5f);
                 break;
             }
         }
@@ -846,28 +847,17 @@ void LocalMapping::FindLandmarks()
 
         Landmark landmark;
         landmark.classIdx = object.classIdx;
-        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] =
-                cv::Point2f((bbox.x + bbox.width) / 2, (bbox.y + bbox.height) / 2);
+        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] = Point2f(bbox.x + bbox.width * .5f,
+                                                                    bbox.y + bbox.height * .5f);
 
         // Find landmarks with respect to the detected objects.
-        Mat bestRlw, bestInvRlw;
-        CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
-                                                       mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                                       cameraRoll, cameraPitch,
-                                                       mpCurrentKeyFrame->mnFrameId, objId,
-                                                       mpCurrentKeyFrame->mImColor, false, true);
-
-        if (!bestProposal.valid)
+        auto proposal = FindBestProposal(bbox, segsInBbox, K,
+                                         mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
+                                         cameraRoll, cameraPitch,
+                                         mpCurrentKeyFrame->mnFrameId, objId,
+                                         mpCurrentKeyFrame->mImColor, false, true);
+        if (!proposal.valid)
             continue;
-        {
-            Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
-            cout << object.conf << endl;
-            cout << "Roll=" << theta[0] * 180 / M_PI << " Pitch=" << theta[1] * 180 / M_PI << " Yaw="
-                 << theta[2] * 180 / M_PI << endl;
-
-            // Draw cuboid proposal
-            DrawCuboidProposal(canvas, bestProposal, bbox, K);
-        }
 
         // Reason the pose and dimension of the landmark from the best proposal.
         // Approximate the depth of the centroid to be the average of the map points that fall in the bounding box.
@@ -887,14 +877,22 @@ void LocalMapping::FindLandmarks()
         worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        Mat centroid = (Mat_<float>(3, 1) << bbox.x + (bbox.width >> 1), bbox.y + (bbox.height >> 1), 1);
-        centroid = invK * centroid;
-        centroid *= avgDepth / centroid.at<float>(3, 3);
+        auto centroid2D = LineIntersection(proposal.corners[2], proposal.corners[6],
+                                          proposal.corners[1], proposal.corners[5]);
+        Mat camCoordCentroid = (Mat_<float>(3, 1) << centroid2D.x, centroid2D.y, 1);
+        camCoordCentroid = invK * camCoordCentroid;
+        camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(3, 3);
+
+        // Recover pose.
+        Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * camCoordCentroid + mpCurrentKeyFrame->GetTranslation();
+        Mat Rlw = proposal.Rlc * mpCurrentKeyFrame->GetPose();
+        Mat tlw = -Rlw * worldCentroid;
+        landmark.SetPose(Rlw, tlw);
+
         // TODO: Recover the dimension of the landmark with the centroid and the proposal.
 
-        // TODO: Store the pose corresponding to best proposal into the keyframe.
-
-        // TODO: Visualize the best 2D proposal.
+        // Store the pose corresponding to best proposal into the keyframe.
+        mpCurrentKeyFrame->AddLandmark(make_shared<Landmark>(landmark));
     }
     t2 = high_resolution_clock::now();
     timeSpan = duration_cast<duration<double>>(t2 - t1);

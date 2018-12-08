@@ -88,7 +88,7 @@ int main()
 
             // Find landmarks with respect to the detected objects.
             Mat bestRlw, bestInvRlw;
-            CuboidProposal bestProposal = FindBestProposal(bbox, segsInBbox, K,
+            Cuboid2D bestProposal = FindBestProposal(bbox, segsInBbox, K,
                                                            shapeErrThresh, shapeErrWeight, alignErrWeight,
                                                            -M_PI, 0, objId,
                                                            0, img, false);
@@ -101,7 +101,7 @@ int main()
                      << theta[2] * 180 / M_PI << endl;
 
                 // Draw cuboid proposal
-                DrawCuboidProposal(canvas, bestProposal, bbox, K);
+                DrawCuboid(canvas, bestProposal, bbox, K);
             }
         }
 
@@ -139,7 +139,7 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     Mat canvas = img.clone();
     rectangle(canvas, bbox, Scalar(0, 0, 0), 2);
     if (proposal.valid)
-        DrawCuboidProposal(canvas, proposal, bbox, K);
+        DrawCuboid(canvas, proposal, bbox, K);
     line(canvas, vp1, proposal.corners[0], Scalar(255, 0, 0));
     line(canvas, vp2, proposal.corners[0], Scalar(255, 0, 0));
     line(canvas, vp1, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 0, 255), 2);

@@ -30,7 +30,7 @@ inline float ChamferDist(const LineSegment& hypothesis,
 }
 
 static inline float
-DistanceError(const CuboidProposal& proposal, const Rect& bbox, const vector<vector<float>>& distMap)
+DistanceError(const Cuboid2D& proposal, const Rect& bbox, const vector<vector<float>>& distMap)
 {
     float distErr = 0;
     float weight_sum = 0;
@@ -54,7 +54,7 @@ DistanceError(const CuboidProposal& proposal, const Rect& bbox, const vector<vec
     return distErr;
 }
 
-static inline float AlignmentError(const CuboidProposal& proposal, const vector<LineSegment*>& lineSegs,
+static inline float AlignmentError(const Cuboid2D& proposal, const vector<LineSegment*>& lineSegs,
                                    const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3)
 {
     float alignErr = 0;
@@ -96,7 +96,7 @@ static inline float AlignmentError(const CuboidProposal& proposal, const vector<
     return alignErr;
 }
 
-static inline float ShapeError(const CuboidProposal& proposal, float shapeErrThresh)
+static inline float ShapeError(const Cuboid2D& proposal, float shapeErrThresh)
 {
     float edgeLenSum1 = Distance(proposal.corners[0], proposal.corners[1])
                         + Distance(proposal.corners[2], proposal.corners[3])
@@ -113,17 +113,17 @@ static inline float ShapeError(const CuboidProposal& proposal, float shapeErrThr
     return shapeErr;
 }
 
-CuboidProposal FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs, const Mat& K,
-                                float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
-                                float refRoll, float refPitch,
-                                int frameId, int objId, const Mat& image,
-                                bool display, bool save)
+Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs, const Mat& K,
+                          float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
+                          float refRoll, float refPitch,
+                          const unsigned long frameId, int objId, const Mat& image,
+                          bool display, bool save)
 {
     auto distMap = PrecomputeChamferDistMap(bbox, lineSegs);
 
     Mat canvas;
     vector<float> distErrs, alignErrs, shapeErrs;
-    vector<CuboidProposal> candidates;
+    vector<Cuboid2D> candidates;
     const auto topXStep = max(2, bbox.width / 10);
     const auto topXStart = bbox.x + (topXStep >> 1);
     const auto topXEnd = bbox.x + bbox.width - (topXStep >> 1);
@@ -197,7 +197,7 @@ CuboidProposal FindBestProposal(const Rect& bbox, const vector<LineSegment*>& li
 
             canvas = image.clone();
             rectangle(canvas, bbox, Scalar(0, 0, 0), 1, CV_AA);
-            DrawCuboidProposal(canvas, proposal, bbox, K);
+            DrawCuboid(canvas, proposal, bbox, K);
 
             for (auto& seg : lineSegs) {
                 line(canvas, seg->first, seg->second, Scalar(0, 0, 255), 1, CV_AA);
@@ -231,24 +231,24 @@ CuboidProposal FindBestProposal(const Rect& bbox, const vector<LineSegment*>& li
     return candidates[bestProposalIdx];
 }
 
-CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
-                                      const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3)
+Cuboid2D GenerateCuboidProposal(const cv::Rect& bbox, int topX,
+                                const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3)
 {
     if (vp3.x <= bbox.x || vp3.x >= bbox.x + bbox.width || vp3.y <= bbox.y + bbox.height)
-        return CuboidProposal();
+        return Cuboid2D();
     if (vp1.y > bbox.y || vp2.y > bbox.y)
-        return CuboidProposal();
+        return Cuboid2D();
 
     bool flip = (vp1.x > bbox.x + bbox.width && vp2.x < bbox.x) ||
                 (vp2.x > bbox.x && vp2.x < bbox.x + bbox.width);
     if (flip) {
-        CuboidProposal proposal = GenerateCuboidProposal(bbox, topX, vp2, vp1, vp3);
+        Cuboid2D proposal = GenerateCuboidProposal(bbox, topX, vp2, vp1, vp3);
         swap(proposal.corners[1], proposal.corners[2]);
         swap(proposal.corners[5], proposal.corners[6]);
         return proposal;
     }
 
-    CuboidProposal proposal;
+    Cuboid2D proposal;
 
     proposal.corners[0] = Point2f(topX, bbox.y);
 
@@ -256,25 +256,25 @@ CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
     if (vp1.x < bbox.x && vp2.x > bbox.x + bbox.width) {
         // 3 faces
         proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x + bbox.width);
-        if (!inside(proposal.corners[1], bbox))
+        if (!Inside(proposal.corners[1], bbox))
             return proposal;
         proposal.corners[2] = LineIntersectionX(vp2, proposal.corners[0], bbox.x);
-        if (!inside(proposal.corners[2], bbox))
+        if (!Inside(proposal.corners[2], bbox))
             return proposal;
         proposal.corners[3] = LineIntersection(vp1, proposal.corners[2], vp2, proposal.corners[1]);
-        if (!inside(proposal.corners[3], bbox))
+        if (!Inside(proposal.corners[3], bbox))
             return proposal;
         proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
-        if (!inside(proposal.corners[4], bbox))
+        if (!Inside(proposal.corners[4], bbox))
             return proposal;
         proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
-        if (!inside(proposal.corners[5], bbox))
+        if (!Inside(proposal.corners[5], bbox))
             return proposal;
         proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
-        if (!inside(proposal.corners[6], bbox))
+        if (!Inside(proposal.corners[6], bbox))
             return proposal;
         proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
-        if (!inside(proposal.corners[7], bbox))
+        if (!Inside(proposal.corners[7], bbox))
             return proposal;
 
         proposal.isCornerVisible[4] = true;
@@ -286,37 +286,37 @@ CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
         if (vp2.x < bbox.x) {
             // 2 faces
             proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x);
-            if (!inside(proposal.corners[1], bbox))
+            if (!Inside(proposal.corners[1], bbox))
                 return proposal;
             proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x + bbox.width);
-            if (!inside(proposal.corners[3], bbox))
+            if (!Inside(proposal.corners[3], bbox))
                 return proposal;
         }
         else if (vp2.x > bbox.x + bbox.width) {
             // 2 faces
             proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x + bbox.width);
-            if (!inside(proposal.corners[1], bbox))
+            if (!Inside(proposal.corners[1], bbox))
                 return proposal;
             proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x);
-            if (!inside(proposal.corners[3], bbox))
+            if (!Inside(proposal.corners[3], bbox))
                 return proposal;
         }
         else
             return proposal;
         proposal.corners[2] = LineIntersection(vp1, proposal.corners[3], vp2, proposal.corners[0]);
-        if (!inside(proposal.corners[2], bbox))
+        if (!Inside(proposal.corners[2], bbox))
             return proposal;
         proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
-        if (!inside(proposal.corners[4], bbox))
+        if (!Inside(proposal.corners[4], bbox))
             return proposal;
         proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
-        if (!inside(proposal.corners[5], bbox))
+        if (!Inside(proposal.corners[5], bbox))
             return proposal;
         proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
-        if (!inside(proposal.corners[6], bbox))
+        if (!Inside(proposal.corners[6], bbox))
             return proposal;
         proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
-        if (!inside(proposal.corners[7], bbox))
+        if (!Inside(proposal.corners[7], bbox))
             return proposal;
 
         proposal.isCornerVisible[4] = true;
@@ -353,8 +353,8 @@ std::vector<std::vector<float>> PrecomputeChamferDistMap(const cv::Rect& bbox,
     return distMap;
 }
 
-void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
-                               const cv::Scalar& edgeColor)
+void DrawCuboid(cv::Mat& canvas, const Cuboid2D& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                const cv::Scalar& edgeColor)
 {
     cv::Mat vp1Homo = K * proposal.Rlc.col(0);
     cv::Mat vp3Homo = K * proposal.Rlc.col(1);

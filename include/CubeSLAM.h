@@ -30,17 +30,17 @@
 namespace ORB_SLAM2 {
 
 // Represent the cuboid proposal with the coordinates in frame of the 8 corners.
-struct CuboidProposal {
+struct Cuboid2D {
     cv::Mat Rlc;
     cv::Point2f corners[8];
     bool isCornerVisible[8]{true, true, true, true};
     bool valid = false;
 
-    friend std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal);
+    friend std::ostream& operator<<(std::ostream& out, const Cuboid2D& proposal);
 
-    inline CuboidProposal() = default;
+    inline Cuboid2D() = default;
 
-    inline CuboidProposal(const CuboidProposal& other)
+    inline Cuboid2D(const Cuboid2D& other)
     {
         valid = other.valid;
         Rlc = other.Rlc.clone();
@@ -49,12 +49,12 @@ struct CuboidProposal {
     }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal)
+inline std::ostream& operator<<(std::ostream& out, const Cuboid2D& cuboid)
 {
     out << '[';
     for (int i = 0; i < 7; ++i)
-        out << proposal.corners[i] << ',';
-    out << proposal.corners[7] << ']';
+        out << cuboid.corners[i] << ',';
+    out << cuboid.corners[7] << ']';
     return out;
 }
 
@@ -89,7 +89,7 @@ inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
 }
 
 template<class T1, class T2>
-inline bool inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
+inline bool Inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
 {
     return pt.x >= bbox.x && pt.x <= bbox.x + bbox.width && pt.y >= bbox.y && pt.y <= bbox.y + bbox.height;
 }
@@ -264,17 +264,17 @@ inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
     return angle;
 }
 
-void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
-                        const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
+void DrawCuboid(cv::Mat& canvas, const Cuboid2D& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
 
-CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
-                                      const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
+Cuboid2D GenerateCuboidProposal(const cv::Rect& bbox, int topX,
+                                const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
 
-CuboidProposal FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
-                                float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
-                                float refRoll, float refPitch,
-                                int frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
-                                bool display = false, bool save = false);
+Cuboid2D FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
+                          float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
+                          float refRoll, float refPitch,
+                          unsigned long frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
+                          bool display = false, bool save = false);
 
 }
 
