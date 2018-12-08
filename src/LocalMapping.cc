@@ -822,10 +822,13 @@ void LocalMapping::FindLandmarks()
 
         // Remove objects already seen in previous keyframes.
         bool seen = false;
-        for (const auto& center: projCenters) {
+        for (int cIdx = 0; cIdx < projCenters.size(); ++cIdx) {
             // Check if the previous center is near the center of the current bounding box.
+            const auto& center = projCenters[cIdx];
             if (max(center.x - bbox.x, center.y - bbox.y) <= min(bbox.width, bbox.height) >> 2) {
                 seen = true;
+                mpCurrentKeyFrame->mpLandmarks[cIdx]->bboxCenter[mpCurrentKeyFrame->mnFrameId] =
+                        cv::Point2f((bbox.x + bbox.width) / 2, (bbox.y + bbox.height) / 2);
                 break;
             }
         }
@@ -843,6 +846,8 @@ void LocalMapping::FindLandmarks()
 
         Landmark landmark;
         landmark.classIdx = object.classIdx;
+        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] =
+                cv::Point2f((bbox.x + bbox.width) / 2, (bbox.y + bbox.height) / 2);
 
         // Find landmarks with respect to the detected objects.
         Mat bestRlw, bestInvRlw;

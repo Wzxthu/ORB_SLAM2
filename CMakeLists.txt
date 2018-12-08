@@ -137,5 +137,7 @@ add_executable(mono_euroc
 Examples/Monocular/mono_euroc.cc)
 target_link_libraries(mono_euroc ${PROJECT_NAME})
 
+set(CMAKE_RUNTIME_OUTPUT_DIRECTORY ${PROJECT_SOURCE_DIR}/test)
+
 add_executable(cubeslam_test test/CubeslamTest.cc)
 target_link_libraries(cubeslam_test ${PROJECT_NAME})
