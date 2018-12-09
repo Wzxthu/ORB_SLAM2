@@ -65,6 +65,7 @@ int main()
         for (int r = 0; r < 3; ++r)
             for (int c = 0; c < 3; ++c)
                 fin >> K.at<float>(r, c);
+        Mat invK = K.inv();
         // Load prior of roll and pitch range.
         float rollRange, pitchRange;
         fin >> rollRange >> pitchRange;
@@ -98,23 +99,43 @@ int main()
 
             // Find landmarks with respect to the detected objects.
             Mat bestRlw, bestInvRlw;
-            Cuboid2D bestProposal = FindBestProposal(bbox, segsInBbox, K,
-                                                     shapeErrThresh, shapeErrWeight, alignErrWeight,
-                                                     -M_PI_F, 0,
-                                                     rollRange, pitchRange,
-                                                     0, objId, img, false, false);
+            Cuboid2D proposal = FindBestProposal(bbox, segsInBbox, K,
+                                                 shapeErrThresh, shapeErrWeight, alignErrWeight,
+                                                 -M_PI_F, 0,
+                                                 rollRange, pitchRange,
+                                                 0, objId, img, false, false);
 
-            if (!bestProposal.valid)
+            if (!proposal.valid)
                 continue;
             {
-                Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
+                Vec3f theta = EulerAnglesFromRotation(proposal.Rlc);
                 cout << "Roll=" << theta[0] * 180 / M_PI
                      << " Yaw=" << theta[1] * 180 / M_PI
                      << " Pitch=" << theta[2] * 180 / M_PI << endl;
 
                 // Draw cuboid proposal
-                bestProposal.Draw(canvas, K);
+//                proposal.Draw(canvas, K);
             }
+
+            Landmark landmark;
+
+            auto centroid2D = proposal.GetCentroid();
+            Mat camCoordCentroid = invK * PointToHomo(centroid2D);
+            camCoordCentroid *= 100 / camCoordCentroid.at<float>(2, 0);
+
+            landmark.SetPose(proposal.Rlc, -proposal.Rlc * camCoordCentroid);
+
+            // Recover the dimension of the landmark with the centroid and the proposal.
+            auto dimension = DimensionFromProposal(proposal, camCoordCentroid);
+            landmark.SetDimension(dimension);
+
+            cout << dimension << endl;
+
+            auto projCuboid = landmark.Project(Mat::eye(4, 4, CV_32F), K);
+            projCuboid.Draw(canvas, K);
+
+            cout << proposal << endl;
+            cout << projCuboid << endl << endl;
         }
 
         imshow("test_" + to_string(i), canvas);

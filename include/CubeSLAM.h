@@ -101,6 +101,8 @@ inline float DistanceToRay(const cv::Mat& pt3D, const cv::Mat& direction, const 
     const float rx = ray.at<float>(0, 0);
     const float ry = ray.at<float>(1, 0);
     const float rz = ray.at<float>(2, 0);
+    std::cout << "Dimension: " << (rz * Px - rx * Pz) / (rx * dz - rz * dx) << ' '
+              << (rz * Py - ry * Pz) / (ry * dz - rz * dy) << std::endl;
     return ((rz * Px - rx * Pz) / (rx * dz - rz * dx) + (rz * Py - ry * Pz) / (ry * dz - rz * dy)) * .5f /
            sqrtf(dx * dx + dy * dy + dz * dz);
 }

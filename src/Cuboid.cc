@@ -83,10 +83,8 @@ void Cuboid2D::Draw(Mat& canvas, const Mat& K, const Scalar& edgeColor) const
         line(canvas, corners[5], corners[7], edgeColor, 1 + (isCornerVisible[5] && isCornerVisible[7]), CV_AA);
 
     for (int i = 7; i >= 0; --i) {
-        putText(canvas, to_string(i), corners[i],
-                FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(0, 0, 0), 8);
-        putText(canvas, to_string(i), corners[i],
-                FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(255, 255, 255), 2);
+        putText(canvas, to_string(i + 1), corners[i], FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(0, 0, 0), 8);
+        putText(canvas, to_string(i + 1), corners[i], FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(255, 255, 255), 2);
     }
 }
 

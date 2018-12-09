@@ -770,10 +770,6 @@ void LocalMapping::FindLandmarks()
 
     auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
-//    for (auto& seg: lineSegs) {
-//        line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 1);
-//    }
-
     // Get Intrinsic and Extrinsic Matrix
     const auto M = mpCurrentKeyFrame->GetPose(); // 4 x 4 projection matrix
     const auto R = mpCurrentKeyFrame->GetRotation();
@@ -799,7 +795,7 @@ void LocalMapping::FindLandmarks()
         if (bbox.width <= 96 || bbox.height <= 96)
             continue;
 
-        // draw bbox
+        // Draw the bounding bbox.
         ObjectDetector::Draw(canvas, object);
 
         // Ignore the bounding box that goes outside the frame.
@@ -870,7 +866,7 @@ void LocalMapping::FindLandmarks()
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
         auto centroid2D = proposal.GetCentroid();
         Mat camCoordCentroid = invK * PointToHomo(centroid2D);
-        camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(3, 3);
+        camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(2, 0);
 
         // Recover pose.
         Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * camCoordCentroid + mpCurrentKeyFrame->GetTranslation();
