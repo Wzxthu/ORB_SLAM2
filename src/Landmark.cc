@@ -60,13 +60,19 @@ void Landmark::SetPose(const Mat& Tlw_)
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
-void Landmark::SetPose(const Mat& Rlw_, const Mat& tlw_)
+void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 {
-    Mat Tlw_ = Mat::zeros(4, 4, CV_32F);
-    Tlw_.at<float>(3, 3) = 1;
-    Tlw_.colRange(0, 3).rowRange(0, 3) = Rlw_;
-    Tlw_.col(3).rowRange(0, 3) = tlw_;
-    SetPose(Tlw_);
+    unique_lock<mutex> lock(mMutexPose);
+    Mat Rwl = Rlw.t();
+    Lw = -Rwl * tlw;
+
+    Tlw = Mat::eye(4, 4, Rlw.type());
+    Rlw.copyTo(Tlw.rowRange(0, 3).colRange(0, 3));
+    tlw.copyTo(Tlw.rowRange(0, 3).col(3));
+
+    Twl = Mat::eye(4, 4, Tlw.type());
+    Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
+    Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
 Point2f Landmark::GetProjectedCentroid(const Mat& Tcw)
@@ -104,6 +110,36 @@ Mat Landmark::GetTranslation()
 {
     unique_lock<mutex> lock(mMutexPose);
     return Tlw.rowRange(0, 3).col(3).clone();
+}
+
+Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
+{
+    unique_lock<mutex> lock(mMutexPose);
+    Cuboid2D cuboid;
+    auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
+    Mat Tcl = Tcw * Twl;
+    Mat Rcl = Tcl.rowRange(0, 3).colRange(0, 3);
+    auto d1 = Rcl.col(0);
+    auto d3 = Rcl.col(1);
+    auto d2 = Rcl.col(2);
+
+    Mat corners3D[8] {
+        centroid + d1 - d2 - d3,
+        centroid - d1 - d2 - d3,
+        centroid + d1 + d2 - d3,
+        centroid - d1 + d2 - d3,
+        centroid - d1 + d2 + d3,
+        centroid + d1 + d2 + d3,
+        centroid - d1 - d2 + d3,
+        centroid + d1 - d2 + d3,
+    };
+
+    for (int i = 0; i < 8; ++i)
+        cuboid.corners[i] = PointFrom2DHomo(K * corners3D[i]);
+    cuboid.valid = true;
+    cuboid.Rlc = Rcl.t();
+
+    return cuboid;
 }
 
 }

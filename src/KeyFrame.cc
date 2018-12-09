@@ -558,13 +558,13 @@ vector<size_t> KeyFrame::GetFeaturesInArea(const float& x, const float& y, const
     for (int ix = nMinCellX; ix <= nMaxCellX; ix++) {
         for (int iy = nMinCellY; iy <= nMaxCellY; iy++) {
             const vector<size_t> vCell = mGrid[ix][iy];
-            for (size_t j = 0, jend = vCell.size(); j < jend; j++) {
-                const cv::KeyPoint& kpUn = mvKeysUn[vCell[j]];
+            for (auto cell : vCell) {
+                const auto& kpUn = mvKeysUn[cell];
                 const float distx = kpUn.pt.x - x;
                 const float disty = kpUn.pt.y - y;
 
                 if (fabs(distx) < r && fabs(disty) < r)
-                    vIndices.push_back(vCell[j]);
+                    vIndices.push_back(cell);
             }
         }
     }
@@ -626,13 +626,13 @@ float KeyFrame::ComputeSceneMedianDepth(const int q)
 
 void KeyFrame::AddLandmark(std::shared_ptr<Landmark> pLandmark)
 {
-    unique_lock<mutex> lock(mMutexFeatures);
+    unique_lock<mutex> lock(mMutexLandmarks);
     mpLandmarks.emplace_back(pLandmark);
 }
 
 std::vector<std::shared_ptr<Landmark>> KeyFrame::GetLandmarks()
 {
-    unique_lock<mutex> lock(mMutexFeatures);
+    unique_lock<mutex> lock(mMutexLandmarks);
     return mpLandmarks;
 }
 

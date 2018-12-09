@@ -151,9 +151,9 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                     Mat vp1Homo = K * Rlc.col(0);
                     Mat vp3Homo = K * Rlc.col(1);
                     Mat vp2Homo = K * Rlc.col(2);
-                    Point2f vp1 = Point2FromHomo(vp1Homo);
-                    Point2f vp2 = Point2FromHomo(vp2Homo);
-                    Point2f vp3 = Point2FromHomo(vp3Homo);
+                    Point2f vp1 = PointFrom2DHomo(vp1Homo);
+                    Point2f vp2 = PointFrom2DHomo(vp2Homo);
+                    Point2f vp3 = PointFrom2DHomo(vp3Homo);
 
                     if (vp3.x <= bbox.x || vp3.x >= bbox.x + bbox.width || vp3.y <= bbox.y + bbox.height)
                         continue;
@@ -213,7 +213,7 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
 
                 canvas = image.clone();
                 rectangle(canvas, bbox, Scalar(0, 0, 0), 1, CV_AA);
-                DrawCuboid(canvas, proposal, bbox, K);
+                proposal.Draw(canvas, K);
 
                 for (auto& seg : lineSegs) {
                     line(canvas, seg->first, seg->second, Scalar(0, 0, 255), 1, CV_AA);
@@ -358,111 +358,9 @@ vector<vector<float>> PrecomputeChamferDistMap(const Rect& bbox,
                 if (dist < minDist)
                     minDist = dist;
             }
-//            minDist = powf(minDist, 2);
         }
     }
     return distMap;
-}
-
-void DrawCuboid(Mat& canvas, const Cuboid2D& proposal, const Rect& bbox, const Mat& K,
-                const Scalar& edgeColor)
-{
-    Mat vp1Homo = K * proposal.Rlc.col(0);
-    Mat vp3Homo = K * proposal.Rlc.col(1);
-    Mat vp2Homo = K * proposal.Rlc.col(2);
-    Point2f vp1 = Point2FromHomo(vp1Homo);
-    Point2f vp2 = Point2FromHomo(vp2Homo);
-    Point2f vp3 = Point2FromHomo(vp3Homo);
-
-    line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
-         1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
-    line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
-         1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
-    line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
-         1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
-    line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
-         1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
-    line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
-         1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
-    line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
-         1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
-    line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
-         1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
-    line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
-         1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
-    line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
-         1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
-    line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
-         1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
-    line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
-         1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
-    line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
-         1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
-
-    line(canvas, vp1, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 0, 255), 4);
-    line(canvas, vp2, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 255, 0), 4);
-    line(canvas, vp3, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(255, 0, 0), 4);
-
-    circle(canvas, vp1, 4, Scalar(0, 0, 255), 2);
-    circle(canvas, vp2, 4, Scalar(0, 255, 0), 2);
-    circle(canvas, vp3, 4, Scalar(255, 0, 0), 2);
-
-//    line(canvas, vp1, proposal.corners[0], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[2], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[5], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[7], Scalar(0, 0, 255));
-//    line(canvas, vp2, proposal.corners[0], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[1], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[6], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[7], Scalar(0, 255, 0));
-//    line(canvas, vp3, proposal.corners[4], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[5], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[6], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[7], Scalar(255, 0, 0));
-
-    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[1])
-        line(canvas, proposal.corners[0], proposal.corners[1], edgeColor,
-             1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[1]), CV_AA);
-    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[3])
-        line(canvas, proposal.corners[1], proposal.corners[3], edgeColor,
-             1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[3]), CV_AA);
-    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[2])
-        line(canvas, proposal.corners[3], proposal.corners[2], edgeColor,
-             1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[2]), CV_AA);
-    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[0])
-        line(canvas, proposal.corners[2], proposal.corners[0], edgeColor,
-             1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[0]), CV_AA);
-    if (proposal.isCornerVisible[0] && proposal.isCornerVisible[7])
-        line(canvas, proposal.corners[0], proposal.corners[7], edgeColor,
-             1 + (proposal.isCornerVisible[0] && proposal.isCornerVisible[7]), CV_AA);
-    if (proposal.isCornerVisible[1] && proposal.isCornerVisible[6])
-        line(canvas, proposal.corners[1], proposal.corners[6], edgeColor,
-             1 + (proposal.isCornerVisible[1] && proposal.isCornerVisible[6]), CV_AA);
-    if (proposal.isCornerVisible[2] && proposal.isCornerVisible[5])
-        line(canvas, proposal.corners[2], proposal.corners[5], edgeColor,
-             1 + (proposal.isCornerVisible[2] && proposal.isCornerVisible[5]), CV_AA);
-    if (proposal.isCornerVisible[3] && proposal.isCornerVisible[4])
-        line(canvas, proposal.corners[3], proposal.corners[4], edgeColor,
-             1 + (proposal.isCornerVisible[3] && proposal.isCornerVisible[4]), CV_AA);
-    if (proposal.isCornerVisible[7] && proposal.isCornerVisible[6])
-        line(canvas, proposal.corners[7], proposal.corners[6], edgeColor,
-             1 + (proposal.isCornerVisible[7] && proposal.isCornerVisible[6]), CV_AA);
-    if (proposal.isCornerVisible[6] && proposal.isCornerVisible[4])
-        line(canvas, proposal.corners[6], proposal.corners[4], edgeColor,
-             1 + (proposal.isCornerVisible[6] && proposal.isCornerVisible[4]), CV_AA);
-    if (proposal.isCornerVisible[4] && proposal.isCornerVisible[5])
-        line(canvas, proposal.corners[4], proposal.corners[5], edgeColor,
-             1 + (proposal.isCornerVisible[4] && proposal.isCornerVisible[5]), CV_AA);
-    if (proposal.isCornerVisible[5] && proposal.isCornerVisible[7])
-        line(canvas, proposal.corners[5], proposal.corners[7], edgeColor,
-             1 + (proposal.isCornerVisible[5] && proposal.isCornerVisible[7]), CV_AA);
-
-    for (int i = 7; i >= 0; --i) {
-        putText(canvas, to_string(i), proposal.corners[i],
-                FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(0, 0, 0), 8);
-        putText(canvas, to_string(i), proposal.corners[i],
-                FONT_HERSHEY_SIMPLEX, 0.5f, Scalar(255, 255, 255), 2);
-    }
 }
 
 LandmarkDimension DimensionFromProposal(const Cuboid2D& proposal, const Mat& camCoordCentroid)

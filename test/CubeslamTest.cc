@@ -71,7 +71,7 @@ int main()
             auto& bbox = object.bbox;
             // draw bbox
             cout << bbox << endl;
-            ObjectDetector::DrawPred(canvas, object);
+            ObjectDetector::Draw(canvas, object);
 
 //            RunCuboidProposalGenerationTest(img, bbox, K);
 
@@ -107,7 +107,7 @@ int main()
                      << theta[2] * 180 / M_PI << endl;
 
                 // Draw cuboid proposal
-                DrawCuboid(canvas, bestProposal, bbox, K);
+                bestProposal.Draw(canvas, K);
             }
         }
 
@@ -137,9 +137,9 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     Mat vp1Homo = K * Rlc.col(0);
     Mat vp3Homo = K * Rlc.col(1);
     Mat vp2Homo = K * Rlc.col(2);
-    Point2f vp1 = Point2FromHomo(vp1Homo);
-    Point2f vp2 = Point2FromHomo(vp2Homo);
-    Point2f vp3 = Point2FromHomo(vp3Homo);
+    Point2f vp1 = PointFrom2DHomo(vp1Homo);
+    Point2f vp2 = PointFrom2DHomo(vp2Homo);
+    Point2f vp3 = PointFrom2DHomo(vp3Homo);
 
     cout << vp1 << ' ' << vp2 << ' ' << vp3 << endl;
 
@@ -147,7 +147,7 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     Mat canvas = img.clone();
     rectangle(canvas, bbox, Scalar(0, 0, 0), 2);
     if (proposal.valid)
-        DrawCuboid(canvas, proposal, bbox, K);
+        proposal.Draw(canvas, K);
     line(canvas, vp1, proposal.corners[0], Scalar(255, 0, 0));
     line(canvas, vp2, proposal.corners[0], Scalar(255, 0, 0));
     line(canvas, vp1, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 0, 255), 2);

@@ -20,7 +20,7 @@
 #ifndef LANDMARK_H
 #define LANDMARK_H
 
-#include <opencv2/opencv.hpp>
+#include "Cuboid.h"
 
 namespace ORB_SLAM2 {
 
@@ -29,7 +29,7 @@ struct LandmarkDimension {
     float edge13{};   // Corresponding to vanishing point 1.
     float edge12{};   // Corresponding to vanishing point 2.
 
-    LandmarkDimension() { }
+    inline LandmarkDimension() = default;
     LandmarkDimension(float height_, float edge13_, float edge12_)
             :height(height_), edge13(edge13_), edge12(edge12_) { }
 };
@@ -42,7 +42,7 @@ public:
     void SetDimension(const LandmarkDimension& dimension);
     LandmarkDimension GetDimension();
     void SetPose(const cv::Mat& Tlw_);
-    void SetPose(const cv::Mat& Rlw_, const cv::Mat& tlw_);
+    void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetCentroid();
@@ -50,6 +50,7 @@ public:
     cv::Mat GetTranslation();
     cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
     std::unordered_map<int, cv::Point2f> bboxCenter;
+    Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
 public:
     int classIdx;
     int landmarkID;

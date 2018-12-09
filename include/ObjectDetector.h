@@ -48,7 +48,7 @@ public:
 
     void Detect(const cv::Mat& im, std::vector<Object>& objects);
 
-    static void DrawPred(cv::Mat& frame, const Object& obj);
+    static void Draw(cv::Mat& frame, const Object& obj);
     static void DrawPred(cv::Mat& frame, cv::Rect bbox, int classId, float conf);
     static void DrawPred(cv::Mat& frame, int left, int top, int right, int bottom, int classId, float conf);
 

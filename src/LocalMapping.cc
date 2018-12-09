@@ -528,7 +528,7 @@ void LocalMapping::SearchInNeighbors()
 
     // Project landmarks in previous keyframes to the current keyframe.
     auto kfPose = mpCurrentKeyFrame->GetPose();
-    auto Rcw_z = kfPose.row(2).colRange(0, 3);
+    auto Rcw_z = kfPose.row(2).colRange(0, 3).t();
     auto tcw_z = kfPose.at<float>(3, 2);
     for (auto pKFi : vpTargetKFs) {
         for (const auto& pLandmark : pKFi->GetLandmarks()) {
@@ -770,9 +770,9 @@ void LocalMapping::FindLandmarks()
 
     auto lineSegs = mpLineSegDetector->Detect(mpCurrentKeyFrame->mImGray);
 
-    for (auto& seg: lineSegs) {
-        line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 2);
-    }
+//    for (auto& seg: lineSegs) {
+//        line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 1);
+//    }
 
     // Get Intrinsic and Extrinsic Matrix
     const auto M = mpCurrentKeyFrame->GetPose(); // 4 x 4 projection matrix
@@ -791,7 +791,6 @@ void LocalMapping::FindLandmarks()
     }
 
     // Compute camera roll and pitch from landmarks seen from previous frames.
-    // TODO: Need checking here.
     float cameraRoll = static_cast<float>(-M_PI), cameraPitch = 0;
     for (const auto& pLandmark : landmarks) {
         Mat Rlc = pLandmark->GetPose() * mpCurrentKeyFrame->GetPoseInverse();
@@ -812,7 +811,7 @@ void LocalMapping::FindLandmarks()
             continue;
 
         // draw bbox
-        ObjectDetector::DrawPred(canvas, object);
+        ObjectDetector::Draw(canvas, object);
 
         // Ignore the bounding box that goes outside the frame.
         if (bbox.x < 0 || bbox.y < 0
@@ -853,12 +852,14 @@ void LocalMapping::FindLandmarks()
         // Find landmarks with respect to the detected objects.
         auto proposal = FindBestProposal(bbox, segsInBbox, K,
                                          mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                         -M_PI, 0,
+                                         -M_PI_F, 0,
                                          10 * M_PI_F / 180, 10 * M_PI_F / 180,
                                          mpCurrentKeyFrame->mnFrameId, objId,
-                                         mpCurrentKeyFrame->mImColor, false, true);
+                                         mpCurrentKeyFrame->mImColor, false, false);
         if (!proposal.valid)
             continue;
+
+        proposal.Draw(canvas, K);
 
         // Reason the pose and dimension of the landmark from the best proposal.
         // Approximate the depth of the centroid to be the average of the map points that fall in the bounding box.
@@ -878,15 +879,13 @@ void LocalMapping::FindLandmarks()
         worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        auto centroid2D = LineIntersection(proposal.corners[2], proposal.corners[6],
-                                           proposal.corners[1], proposal.corners[5]);
-        Mat camCoordCentroid = (Mat_<float>(3, 1) << centroid2D.x, centroid2D.y, 1);
-        camCoordCentroid = invK * camCoordCentroid;
+        auto centroid2D = proposal.GetCentroid();
+        Mat camCoordCentroid = invK * PointToHomo(centroid2D);
         camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(3, 3);
 
         // Recover pose.
         Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * camCoordCentroid + mpCurrentKeyFrame->GetTranslation();
-        Mat Rlw = proposal.Rlc * mpCurrentKeyFrame->GetPose();
+        Mat Rlw = proposal.Rlc * mpCurrentKeyFrame->GetRotation();
         Mat tlw = -Rlw * worldCentroid;
         landmark.SetPose(Rlw, tlw);
 
