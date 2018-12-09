@@ -43,7 +43,7 @@ class FrameDrawer;
 class LocalMapping {
 public:
     LocalMapping(Map* pMap, FrameDrawer* pFrameDrawer, bool bMonocular,
-                 float alignErrWeight = 0.7, float shapeErrWeight = 2.5, float shapeErrThresh = 2.f);
+                 float alignErrWeight = 2, float shapeErrWeight = 0.1, float shapeErrThresh = 4.f);
 
     void SetLoopCloser(LoopClosing* pLoopCloser);
 

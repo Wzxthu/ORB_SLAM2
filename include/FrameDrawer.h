@@ -49,7 +49,7 @@ public:
     void Update(Tracking *pTracker);
 
     // Update info from the last processed keyframe.
-    void UpdateKeyframe(const KeyFrame* keyFrame, const std::vector<Object>& objects2D);
+    void UpdateKeyframe(KeyFrame* keyFrame, const std::vector<Object>& objects2D);
 
     // Draw last processed frame.
     cv::Mat DrawFrame();

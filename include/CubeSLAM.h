@@ -23,24 +23,29 @@
 #define CUBESLAM_H
 
 #include "LineSegmentDetector.h"
+#include "Landmark.h"
 
 #include <array>
 #include <opencv2/opencv.hpp>
 
 namespace ORB_SLAM2 {
 
+#define M_PI_F        3.14159265358979323846264338327950288f   /* pi             */
+#define M_PI_2_F      1.57079632679489661923132169163975144f   /* pi/2           */
+#define M_PI_4_F      0.785398163397448309615660845819875721f  /* pi/4           */
+
 // Represent the cuboid proposal with the coordinates in frame of the 8 corners.
-struct CuboidProposal {
+struct Cuboid2D {
     cv::Mat Rlc;
     cv::Point2f corners[8];
     bool isCornerVisible[8]{true, true, true, true};
     bool valid = false;
 
-    friend std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal);
+    friend std::ostream& operator<<(std::ostream& out, const Cuboid2D& cuboid);
 
-    inline CuboidProposal() = default;
+    inline Cuboid2D() = default;
 
-    inline CuboidProposal(const CuboidProposal& other)
+    inline Cuboid2D(const Cuboid2D& other)
     {
         valid = other.valid;
         Rlc = other.Rlc.clone();
@@ -49,18 +54,28 @@ struct CuboidProposal {
     }
 };
 
-inline std::ostream& operator<<(std::ostream& out, const CuboidProposal& proposal)
+inline std::ostream& operator<<(std::ostream& out, const Cuboid2D& cuboid)
 {
     out << '[';
     for (int i = 0; i < 7; ++i)
-        out << proposal.corners[i] << ',';
-    out << proposal.corners[7] << ']';
+        out << cuboid.corners[i] << ',';
+    out << cuboid.corners[7] << ']';
     return out;
+}
+
+inline cv::Mat PointToHomo(const cv::Point2f& pt)
+{
+    return (cv::Mat_<float>(3, 1, CV_32F) << pt.x, pt.y, 1);
+}
+
+inline cv::Mat PointToHomo(const cv::Point3f& pt)
+{
+    return (cv::Mat_<float>(4, 1, CV_32F) << pt.x, pt.y, pt.z, 1);
 }
 
 inline cv::Point2f Point2FromHomo(const cv::Mat& homo)
 {
-    const float RANGE = 1000000;
+    const float RANGE = 10000000;
     const float X = homo.at<float>(0, 0);
     const float Y = homo.at<float>(1, 0);
     const float Z = homo.at<float>(2, 0);
@@ -89,7 +104,7 @@ inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
 }
 
 template<class T1, class T2>
-inline bool inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
+inline bool Inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
 {
     return pt.x >= bbox.x && pt.x <= bbox.x + bbox.width && pt.y >= bbox.y && pt.y <= bbox.y + bbox.height;
 }
@@ -123,6 +138,19 @@ inline float Distance(const cv::Point2f& pt, const LineSegment& edge)
         float h = l1l2 * sine / l3;
         return h;
     }
+}
+
+/**
+ * Compute distance from a 3D point to a ray along the given direction.
+ * @param pt3D 3x1 vector
+ * @param direction 3x1 vector
+ * @param ray 3x1 vector
+ * @return distance
+ */
+inline float DistanceToRay(const cv::Mat& pt3D, const cv::Mat& direction, const cv::Mat& ray)
+{
+    // TODO
+    return 0.f;
 }
 
 inline float ChamferDist(const LineSegment& hypothesis,
@@ -163,6 +191,11 @@ inline cv::Point_<T1> LineIntersectionY(const cv::Point_<T1>& A, const cv::Point
     return cv::Point_<T1>(A.x + (B.x - A.x) * (y - A.y) / (B.y - A.y), y);
 }
 
+/**
+ * Compute the intersection point of line AB and line CD (not segment!).
+ * @tparam T type of point.
+ * @return the intersection point.
+ */
 template<class T>
 inline cv::Point_<T>
 LineIntersection(const cv::Point_<T>& A, const cv::Point_<T>& B, const cv::Point_<T>& C, const cv::Point_<T>& D)
@@ -257,24 +290,28 @@ inline float AlignmentError(const cv::Point2f& pt, const LineSegment& edge)
 {
     cv::Vec2f v1(pt.x - edge.first.x, pt.y - edge.first.y);
     cv::Vec2f v2(edge.second.x - edge.first.x, edge.second.y - edge.first.y);
-    float cosine = v1.dot(v2) / (norm(v1) * norm(v2));
+    float cosine = v1.dot(v2) / (normf(v1) * normf(v2));
     float angle = acos(cosine);
-    if (angle > M_PI_2)
-        angle = M_PI - angle;
+    if (angle > M_PI_2_F)
+        angle = M_PI_F - angle;
     return angle;
 }
 
-void DrawCuboidProposal(cv::Mat& canvas, const CuboidProposal& proposal, const cv::Rect& bbox, const cv::Mat& K,
-                        const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
+void DrawCuboid(cv::Mat& canvas, const Cuboid2D& proposal, const cv::Rect& bbox, const cv::Mat& K,
+                const cv::Scalar& edgeColor = cv::Scalar(255, 255, 255));
 
-CuboidProposal GenerateCuboidProposal(const cv::Rect& bbox, int topX,
-                                      const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
+Cuboid2D GenerateCuboidProposal(const cv::Rect& bbox, int topX,
+                                const cv::Point2f& vp1, const cv::Point2f& vp2, const cv::Point2f& vp3);
 
-CuboidProposal FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
-                                float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
-                                float refRoll, float refPitch,
-                                int frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
-                                bool display = false, bool save = false);
+Cuboid2D FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>& lineSegs, const cv::Mat& K,
+                          float shapeErrThresh, float shapeErrWeight, float alignErrWeight,
+                          float refRoll, float refPitch,
+                          float rollRange = 45 * M_PI_F / 180,
+                          float pitchRange = 45 * M_PI_F / 180,
+                          unsigned long frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
+                          bool display = false, bool save = false);
+
+LandmarkDimension DimensionFromProposal(const Cuboid2D& proposal, const cv::Mat& camCoordCentroid);
 
 }
 

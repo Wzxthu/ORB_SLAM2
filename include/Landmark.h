@@ -36,12 +36,16 @@ struct LandmarkDimension {
 
 class Landmark {
 public:
+    Landmark();
+    Landmark(Landmark& other);
+
     void SetDimension(const LandmarkDimension& dimension);
     LandmarkDimension GetDimension();
     void SetPose(const cv::Mat& Tlw_);
+    void SetPose(const cv::Mat& Rlw_, const cv::Mat& tlw_);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
-    cv::Mat GetLandmarkCenter();
+    cv::Mat GetCentroid();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
     cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
@@ -53,7 +57,7 @@ private:
     // SE3 Pose.
     cv::Mat Tlw;
     cv::Mat Twl;
-    // Landmark center.
+    // Landmark centroid.
     cv::Mat Lw;
     // Landmark dimension.
     LandmarkDimension mDimension;

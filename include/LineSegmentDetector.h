@@ -27,10 +27,15 @@
 
 namespace ORB_SLAM2 {
 
-template<typename _Tp> static inline
-float normf(const cv::Point_<_Tp>& pt)
+template<typename _Tp>
+inline float normf(const cv::Point_<_Tp>& pt)
 {
     return std::sqrtf(pt.x * pt.x + pt.y * pt.y);
+}
+
+inline float normf(const cv::Vec2f& vec)
+{
+    return std::sqrtf(vec[0] * vec[0] + vec[1] * vec[1]);
 }
 
 typedef std::pair<cv::Point2f, cv::Point2f> LineSegment;

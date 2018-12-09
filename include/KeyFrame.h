@@ -83,6 +83,10 @@ public:
     void AddLoopEdge(KeyFrame* pKF);
     std::set<KeyFrame*> GetLoopEdges();
 
+    // Landmark functions
+    void AddLandmark(std::shared_ptr<Landmark> pLandmark);
+    std::vector<std::shared_ptr<Landmark>> GetLandmarks();
+
     // MapPoint observation functions
     void AddMapPoint(MapPoint* pMP, const size_t &idx);
     void EraseMapPointMatch(const size_t &idx);
@@ -196,9 +200,6 @@ public:
     // Gray image for performing line segment detection.
     cv::Mat mImGray;
 
-    // Landmarks.
-    std::vector<std::shared_ptr<Landmark>> mpLandmarks;
-
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
 
@@ -211,6 +212,9 @@ protected:
 
     // MapPoints associated to keypoints
     std::vector<MapPoint*> mvpMapPoints;
+
+    // Landmarks.
+    std::vector<std::shared_ptr<Landmark>> mpLandmarks;
 
     // BoW
     KeyFrameDatabase* mpKeyFrameDB;
