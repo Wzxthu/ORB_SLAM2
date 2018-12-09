@@ -790,17 +790,6 @@ void LocalMapping::FindLandmarks()
         projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose()));
     }
 
-    // Compute camera roll and pitch from landmarks seen from previous frames.
-    float cameraRoll = static_cast<float>(-M_PI), cameraPitch = 0;
-    for (const auto& pLandmark : landmarks) {
-        Mat Rlc = pLandmark->GetPose() * mpCurrentKeyFrame->GetPoseInverse();
-        auto theta = EulerAnglesFromRotation(Rlc);
-        cameraRoll += theta[0];
-        cameraPitch += theta[1];
-    }
-    cameraRoll /= landmarks.size() + 1;
-    cameraPitch /= landmarks.size() + 1;
-
     t1 = high_resolution_clock::now();
     for (int objId = 0; objId < objects2D.size(); ++objId) {
         const auto object = objects2D[objId];

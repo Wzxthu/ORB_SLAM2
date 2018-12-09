@@ -4,6 +4,7 @@
 #include <opencv2/opencv.hpp>
 
 #include <fstream>
+#include <sys/stat.h>
 
 using namespace std;
 using namespace cv;
@@ -15,6 +16,8 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
 
 int main()
 {
+    mkdir("Outputs", S_IRWXU | S_IRWXG | S_IROTH | S_IXOTH);
+
     RunEulerAngleTransformationTest();
 
     string testImgPaths[]{
@@ -22,6 +25,7 @@ int main()
             "data/cubeslam_test_example_1.jpg",
             "data/cubeslam_test_example_2.png",
             "data/cubeslam_test_example_3.png",
+            "data/cubeslam_test_example_4.png",
     };
 
     string testInfoPaths[]{
@@ -29,9 +33,10 @@ int main()
             "data/cubeslam_test_example_1_info.txt",
             "data/cubeslam_test_example_2_info.txt",
             "data/cubeslam_test_example_3_info.txt",
+            "data/cubeslam_test_example_4_info.txt",
     };
 
-    const float alignErrWeight = 2, shapeErrWeight = 0.1, shapeErrThresh = 4.f;
+    const float alignErrWeight = 4, shapeErrWeight = 0.1, shapeErrThresh = 4.f;
 
     auto objectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights",
                                              .45, .6, 224 * 224);
@@ -97,14 +102,15 @@ int main()
                                                      shapeErrThresh, shapeErrWeight, alignErrWeight,
                                                      -M_PI_F, 0,
                                                      rollRange, pitchRange,
-                                                     0, objId, img, false);
+                                                     0, objId, img, false, false);
 
             if (!bestProposal.valid)
                 continue;
             {
                 Vec3f theta = EulerAnglesFromRotation(bestProposal.Rlc);
-                cout << "Roll=" << theta[0] * 180 / M_PI << " Pitch=" << theta[1] * 180 / M_PI << " Yaw="
-                     << theta[2] * 180 / M_PI << endl;
+                cout << "Roll=" << theta[0] * 180 / M_PI
+                     << " Yaw=" << theta[1] * 180 / M_PI
+                     << " Pitch=" << theta[2] * 180 / M_PI << endl;
 
                 // Draw cuboid proposal
                 bestProposal.Draw(canvas, K);
@@ -113,6 +119,8 @@ int main()
 
         imshow("test_" + to_string(i), canvas);
         waitKey(0);
+
+        imwrite("Outputs/test_" + to_string(i) + ".jpg", canvas);
 
         fin.close();
     }
@@ -130,7 +138,7 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     float roll = -M_PI, pitch = 0, yaw = -M_PI;
     cout << "Roll=" << roll * 180 / M_PI << " Pitch=" << pitch * 180 / M_PI << " Yaw=" << yaw * 180 / M_PI << endl;
     // Recover rotation of the landmark.
-    Mat Rlc = EulerAnglesToRotationMatrix(Vec3f(roll, pitch, yaw));
+    Mat Rlc = EulerAnglesToRotationMatrix(Vec3f(roll, yaw, pitch));
     Mat invRlc = Rlc.t();
     cout << Rlc << endl;
     // Compute the vanishing points from the pose.
@@ -146,13 +154,17 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     auto proposal = GenerateCuboidProposal(bbox, bbox.x + bbox.width / 2, vp1, vp2, vp3);
     Mat canvas = img.clone();
     rectangle(canvas, bbox, Scalar(0, 0, 0), 2);
-    if (proposal.valid)
+    if (proposal.valid) {
+        proposal.Rlc = Rlc;
         proposal.Draw(canvas, K);
-    line(canvas, vp1, proposal.corners[0], Scalar(255, 0, 0));
-    line(canvas, vp2, proposal.corners[0], Scalar(255, 0, 0));
-    line(canvas, vp1, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 0, 255), 2);
-    line(canvas, vp2, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(0, 255, 0), 2);
-    line(canvas, vp3, Point(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2), Scalar(255, 0, 0), 2);
+    }
+
+    Point2f centroid = proposal.valid ? proposal.GetCentroid()
+                                      : Point2f(bbox.x + bbox.width / 2, bbox.y + bbox.height / 2);
+
+    line(canvas, vp1, centroid, Scalar(0, 0, 255), 2);
+    line(canvas, vp2, centroid, Scalar(0, 255, 0), 2);
+    line(canvas, vp3, centroid, Scalar(255, 0, 0), 2);
     imshow("Cuboid Proposal Generation Test", canvas);
     waitKey(0);
 }

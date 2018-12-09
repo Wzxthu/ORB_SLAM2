@@ -145,7 +145,7 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                 // Sample the landmark yaw in 180 degrees around the camera yaw.
                 for (float l_yaw = yawStart; l_yaw <= yawEnd; l_yaw += yawStep) {
                     // Recover rotation of the landmark.
-                    Mat Rlc = EulerAnglesToRotationMatrix(Vec3f(l_roll, l_pitch, l_yaw));
+                    Mat Rlc = EulerAnglesToRotationMatrix(Vec3f(l_roll, l_yaw, l_pitch));
 
                     // Compute the vanishing points from the pose.
                     Mat vp1Homo = K * Rlc.col(0);
@@ -154,11 +154,6 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                     Point2f vp1 = PointFrom2DHomo(vp1Homo);
                     Point2f vp2 = PointFrom2DHomo(vp2Homo);
                     Point2f vp3 = PointFrom2DHomo(vp3Homo);
-
-                    if (vp3.x <= bbox.x || vp3.x >= bbox.x + bbox.width || vp3.y <= bbox.y + bbox.height)
-                        continue;
-                    if (vp1.y > bbox.y || vp2.y > bbox.y)
-                        continue;
 
                     // Sample corner on the top boundary.
                     for (int topX = topXStart; topX <= topXEnd; topX += topXStep) {
@@ -222,8 +217,8 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                 if (display) {
                     Vec3f theta = EulerAnglesFromRotation(proposal.Rlc);
                     cout << "Roll=" << theta[0] * 180 / M_PI_F
-                         << " Pitch=" << theta[1] * 180 / M_PI_F
-                         << " Yaw=" << theta[2] * 180 / M_PI_F << endl;
+                         << " Yaw=" << theta[1] * 180 / M_PI_F
+                         << " Pitch=" << theta[2] * 180 / M_PI_F << endl;
                     cout << "Errors:\t" << normDistErr << "\t+\t" << normAlignErr * alignErrWeight << "\t+\t"
                          << shapeErrWeight * shapeErrs[i] << "\t=\t" << totalErr << endl;
                     cout << "Best:\t" << bestNormDistErr << "\t+\t" << bestNormAlignErr * alignErrWeight << "\t+\t"
@@ -245,98 +240,142 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
 Cuboid2D GenerateCuboidProposal(const Rect& bbox, int topX,
                                 const Point2f& vp1, const Point2f& vp2, const Point2f& vp3)
 {
-    if (vp3.x <= bbox.x || vp3.x >= bbox.x + bbox.width || vp3.y <= bbox.y + bbox.height)
-        return Cuboid2D();
-    if (vp1.y > bbox.y || vp2.y > bbox.y)
-        return Cuboid2D();
-
-    bool flip = (vp1.x > bbox.x + bbox.width && vp2.x < bbox.x) ||
-                (vp2.x > bbox.x && vp2.x < bbox.x + bbox.width);
-    if (flip) {
-        Cuboid2D proposal = GenerateCuboidProposal(bbox, topX, vp2, vp1, vp3);
-        swap(proposal.corners[1], proposal.corners[2]);
-        swap(proposal.corners[5], proposal.corners[6]);
-        return proposal;
-    }
-
     Cuboid2D proposal;
+
+    if (vp3.x < bbox.x || vp3.x > bbox.x + bbox.width || vp3.y < bbox.y + bbox.height)
+        return proposal;
+
+    if (vp1.y > bbox.y + bbox.height || vp2.y > bbox.y + bbox.height)
+        return proposal;
 
     proposal.corners[0] = Point2f(topX, bbox.y);
 
     // Compute the other corners with respect to the pose, vanishing points and the bounding box.
-    if (vp1.x <= bbox.x && vp2.x >= bbox.x + bbox.width) {
-        // 3 faces
-        proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x + bbox.width);
-        if (!Inside(proposal.corners[1], bbox))
+    if (vp1.y < bbox.y && vp2.y < bbox.y) {
+        if ((vp1.x > bbox.x + bbox.width && vp2.x < bbox.x) || (vp2.x > bbox.x && vp2.x < bbox.x + bbox.width)) {
+            proposal = GenerateCuboidProposal(bbox, topX, vp2, vp1, vp3);
+            swap(proposal.corners[1], proposal.corners[2]);
+            swap(proposal.corners[5], proposal.corners[6]);
             return proposal;
-        proposal.corners[2] = LineIntersectionX(vp2, proposal.corners[0], bbox.x);
-        if (!Inside(proposal.corners[2], bbox))
-            return proposal;
-        proposal.corners[3] = LineIntersection(vp1, proposal.corners[2], vp2, proposal.corners[1]);
-        if (!Inside(proposal.corners[3], bbox))
-            return proposal;
-        proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
-        if (!Inside(proposal.corners[4], bbox))
-            return proposal;
-        proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
-        if (!Inside(proposal.corners[5], bbox))
-            return proposal;
-        proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
-        if (!Inside(proposal.corners[6], bbox))
-            return proposal;
-        proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
-        if (!Inside(proposal.corners[7], bbox))
-            return proposal;
-
-        proposal.isCornerVisible[4] = true;
-        proposal.isCornerVisible[5] = true;
-        proposal.isCornerVisible[6] = true;
-        proposal.isCornerVisible[7] = false;
-    }
-    else if (vp1.x >= bbox.x && vp1.x <= bbox.x + bbox.width) {
-        if (vp2.x <= bbox.x) {
-            // 2 faces
-            proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x);
-            if (!Inside(proposal.corners[1], bbox))
-                return proposal;
-            proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x + bbox.width);
-            if (!Inside(proposal.corners[3], bbox))
-                return proposal;
         }
-        else if (vp2.x >= bbox.x + bbox.width) {
-            // 2 faces
+
+        if (vp1.x < bbox.x && vp2.x > bbox.x + bbox.width) {
+            // 3 faces
             proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x + bbox.width);
             if (!Inside(proposal.corners[1], bbox))
                 return proposal;
-            proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x);
+            proposal.corners[2] = LineIntersectionX(vp2, proposal.corners[0], bbox.x);
+            if (!Inside(proposal.corners[2], bbox))
+                return proposal;
+            proposal.corners[3] = LineIntersection(vp1, proposal.corners[2], vp2, proposal.corners[1]);
             if (!Inside(proposal.corners[3], bbox))
                 return proposal;
+            proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
+            if (!Inside(proposal.corners[4], bbox))
+                return proposal;
+            proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
+            if (!Inside(proposal.corners[5], bbox))
+                return proposal;
+            proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
+            if (!Inside(proposal.corners[6], bbox))
+                return proposal;
+            proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
+            if (!Inside(proposal.corners[7], bbox))
+                return proposal;
+            proposal.isCornerVisible[4] = true;
+            proposal.isCornerVisible[5] = true;
+            proposal.isCornerVisible[6] = true;
+            proposal.isCornerVisible[7] = false;
+        }
+        else if (vp1.x > bbox.x && vp1.x < bbox.x + bbox.width) {
+            if (vp2.x < bbox.x) {
+                // 2 faces
+                proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x);
+                if (!Inside(proposal.corners[1], bbox))
+                    return proposal;
+                proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x + bbox.width);
+                if (!Inside(proposal.corners[3], bbox))
+                    return proposal;
+                proposal.isCornerVisible[5] = false;
+                proposal.isCornerVisible[6] = true;
+            }
+            else if (vp2.x > bbox.x + bbox.width) {
+                // 2 faces
+                proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x + bbox.width);
+                if (!Inside(proposal.corners[1], bbox))
+                    return proposal;
+                proposal.corners[3] = LineIntersectionX(vp2, proposal.corners[1], bbox.x);
+                if (!Inside(proposal.corners[3], bbox))
+                    return proposal;
+                proposal.isCornerVisible[5] = true;
+                proposal.isCornerVisible[6] = false;
+            }
+            else
+                return proposal;
+            proposal.corners[2] = LineIntersection(vp1, proposal.corners[3], vp2, proposal.corners[0]);
+            if (!Inside(proposal.corners[2], bbox))
+                return proposal;
+            proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
+            if (!Inside(proposal.corners[4], bbox))
+                return proposal;
+            proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
+            if (!Inside(proposal.corners[5], bbox))
+                return proposal;
+            proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
+            if (!Inside(proposal.corners[6], bbox))
+                return proposal;
+            proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
+            if (!Inside(proposal.corners[7], bbox))
+                return proposal;
+            proposal.isCornerVisible[4] = true;
+            proposal.isCornerVisible[7] = false;
         }
         else
             return proposal;
-        proposal.corners[2] = LineIntersection(vp1, proposal.corners[3], vp2, proposal.corners[0]);
-        if (!Inside(proposal.corners[2], bbox))
-            return proposal;
-        proposal.corners[4] = LineIntersectionY(vp3, proposal.corners[3], bbox.y + bbox.height);
-        if (!Inside(proposal.corners[4], bbox))
-            return proposal;
-        proposal.corners[5] = LineIntersection(vp1, proposal.corners[4], vp3, proposal.corners[2]);
-        if (!Inside(proposal.corners[5], bbox))
-            return proposal;
-        proposal.corners[6] = LineIntersection(vp2, proposal.corners[4], vp3, proposal.corners[1]);
-        if (!Inside(proposal.corners[6], bbox))
-            return proposal;
-        proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
-        if (!Inside(proposal.corners[7], bbox))
-            return proposal;
-
-        proposal.isCornerVisible[4] = true;
-        proposal.isCornerVisible[5] = true;
-        proposal.isCornerVisible[6] = false;
-        proposal.isCornerVisible[7] = false;
     }
-    else
-        return proposal;
+    else {
+        if (vp1.y > bbox.y && vp2.y > bbox.y) {
+            if (vp1.x < bbox.x && vp2.x > bbox.x + bbox.width) {
+                proposal.corners[1] = LineIntersectionX(vp1, proposal.corners[0], bbox.x);
+                if (!Inside(proposal.corners[1], bbox))
+                    return proposal;
+                proposal.corners[2] = LineIntersectionX(vp2, proposal.corners[0], bbox.x + bbox.width);
+                if (!Inside(proposal.corners[2], bbox))
+                    return proposal;
+                proposal.corners[3] = LineIntersection(vp1, proposal.corners[2], vp2, proposal.corners[1]);
+                if (!Inside(proposal.corners[3], bbox))
+                    return proposal;
+                proposal.corners[7] = LineIntersectionY(vp3, proposal.corners[0], bbox.y + bbox.height);
+                if (!Inside(proposal.corners[7], bbox))
+                    return proposal;
+                proposal.corners[5] = LineIntersectionX(vp1, proposal.corners[4], bbox.x);
+                if (!Inside(proposal.corners[5], bbox))
+                    return proposal;
+                proposal.corners[6] = LineIntersectionX(vp2, proposal.corners[4], bbox.x + bbox.width);
+                if (!Inside(proposal.corners[6], bbox))
+                    return proposal;
+                proposal.corners[4] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
+                if (!Inside(proposal.corners[4], bbox))
+                    return proposal;
+                proposal.isCornerVisible[0] = true;
+                proposal.isCornerVisible[1] = true;
+                proposal.isCornerVisible[2] = true;
+                proposal.isCornerVisible[3] = false;
+                proposal.isCornerVisible[4] = false;
+                proposal.isCornerVisible[5] = true;
+                proposal.isCornerVisible[6] = true;
+                proposal.isCornerVisible[7] = true;
+            }
+            else {
+                // TODO: Add other cases.
+                return proposal;
+            }
+        }
+        else {
+            // TODO: Add other cases.
+            return proposal;
+        }
+    }
 
     proposal.valid = true;
     return proposal;
