@@ -31,7 +31,7 @@ int main()
             "data/cubeslam_test_example_3_info.txt",
     };
 
-    const float alignErrWeight = 0.7, shapeErrWeight = 2.5, shapeErrThresh = 2.f;
+    const float alignErrWeight = 2, shapeErrWeight = 0.1, shapeErrThresh = 4.f;
 
     auto objectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights",
                                              .45, .6, 224 * 224);
@@ -54,12 +54,17 @@ int main()
             line(canvas, seg.first, seg.second, Scalar(0, 0, 255), 1);
         }
 
-        // TODO: Load camera roll, pitch, yaw and intrinsics for different test images.
+        // Load intrinsics for different test images.
         Mat K(3, 3, CV_32F);
         ifstream fin(testInfoPaths[i]);
         for (int r = 0; r < 3; ++r)
             for (int c = 0; c < 3; ++c)
                 fin >> K.at<float>(r, c);
+        // Load prior of roll and pitch range.
+        float rollRange, pitchRange;
+        fin >> rollRange >> pitchRange;
+        rollRange *= M_PI / 180;
+        pitchRange *= M_PI / 180;
 
         for (int objId = 0; objId < objects2D.size(); ++objId) {
             const auto object = objects2D[objId];
@@ -89,9 +94,10 @@ int main()
             // Find landmarks with respect to the detected objects.
             Mat bestRlw, bestInvRlw;
             Cuboid2D bestProposal = FindBestProposal(bbox, segsInBbox, K,
-                                                           shapeErrThresh, shapeErrWeight, alignErrWeight,
-                                                           -M_PI, 0, objId,
-                                                           0, img, false);
+                                                     shapeErrThresh, shapeErrWeight, alignErrWeight,
+                                                     -M_PI_F, 0,
+                                                     rollRange, pitchRange,
+                                                     0, objId, img, false);
 
             if (!bestProposal.valid)
                 continue;
@@ -107,6 +113,8 @@ int main()
 
         imshow("test_" + to_string(i), canvas);
         waitKey(0);
+
+        fin.close();
     }
     high_resolution_clock::time_point t2 = high_resolution_clock::now();
     duration<double> timeSpan = duration_cast<duration<double>>(t2 - t1);
@@ -133,7 +141,7 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
     Point2f vp2 = Point2FromHomo(vp2Homo);
     Point2f vp3 = Point2FromHomo(vp3Homo);
 
-    cout << vp1 << ' ' << vp2 << ' '<< vp3 << endl;
+    cout << vp1 << ' ' << vp2 << ' ' << vp3 << endl;
 
     auto proposal = GenerateCuboidProposal(bbox, bbox.x + bbox.width / 2, vp1, vp2, vp3);
     Mat canvas = img.clone();
@@ -158,35 +166,35 @@ void RunEulerAngleTransformationTest()
     }
 
     {
-        Vec3f theta(M_PI, 0, 0);
+        Vec3f theta(M_PI_F, 0, 0);
         Mat R = EulerAnglesToRotationMatrix(theta);
         Mat target = (Mat_<float>(3, 3, CV_32F) << 1, 0, 0, 0, -1, 0, 0, 0, -1);
         CV_Assert(norm(R, target) < 0.001);
     }
 
     {
-        Vec3f theta(0, M_PI, 0);
+        Vec3f theta(0, M_PI_F, 0);
         Mat R = EulerAnglesToRotationMatrix(theta);
         Mat target = (Mat_<float>(3, 3, CV_32F) << -1, 0, 0, 0, 1, 0, 0, 0, -1);
         CV_Assert(norm(R, target) < 0.001);
     }
 
     {
-        Vec3f theta(0, 0, M_PI);
+        Vec3f theta(0, 0, M_PI_F);
         Mat R = EulerAnglesToRotationMatrix(theta);
         Mat target = (Mat_<float>(3, 3, CV_32F) << -1, 0, 0, 0, -1, 0, 0, 0, 1);
         CV_Assert(norm(R, target) < 0.01);
     }
 
     {
-        Vec3f theta(0, 0, M_PI_2);
+        Vec3f theta(0, 0, M_PI_2_F);
         Mat R = EulerAnglesToRotationMatrix(theta);
         Mat target = (Mat_<float>(3, 3, CV_32F) << 0, -1, 0, 1, 0, 0, 0, 0, 1);
         CV_Assert(norm(R, target) < 0.01);
     }
 
     {
-        Vec3f theta(0, 0, -M_PI_2);
+        Vec3f theta(0, 0, -M_PI_2_F);
         Mat R = EulerAnglesToRotationMatrix(theta);
         Mat target = (Mat_<float>(3, 3, CV_32F) << 0, 1, 0, -1, 0, 0, 0, 0, 1);
         CV_Assert(norm(R, target) < 0.01);

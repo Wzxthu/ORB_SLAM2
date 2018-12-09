@@ -853,7 +853,8 @@ void LocalMapping::FindLandmarks()
         // Find landmarks with respect to the detected objects.
         auto proposal = FindBestProposal(bbox, segsInBbox, K,
                                          mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
-                                         cameraRoll, cameraPitch,
+                                         -M_PI, 0,
+                                         10 * M_PI_F / 180, 10 * M_PI_F / 180,
                                          mpCurrentKeyFrame->mnFrameId, objId,
                                          mpCurrentKeyFrame->mImColor, false, true);
         if (!proposal.valid)
@@ -878,7 +879,7 @@ void LocalMapping::FindLandmarks()
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
         auto centroid2D = LineIntersection(proposal.corners[2], proposal.corners[6],
-                                          proposal.corners[1], proposal.corners[5]);
+                                           proposal.corners[1], proposal.corners[5]);
         Mat camCoordCentroid = (Mat_<float>(3, 1) << centroid2D.x, centroid2D.y, 1);
         camCoordCentroid = invK * camCoordCentroid;
         camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(3, 3);
@@ -889,7 +890,9 @@ void LocalMapping::FindLandmarks()
         Mat tlw = -Rlw * worldCentroid;
         landmark.SetPose(Rlw, tlw);
 
-        // TODO: Recover the dimension of the landmark with the centroid and the proposal.
+        // Recover the dimension of the landmark with the centroid and the proposal.
+        auto dimension = DimensionFromProposal(proposal, camCoordCentroid);
+        landmark.SetDimension(dimension);
 
         // Store the pose corresponding to best proposal into the keyframe.
         mpCurrentKeyFrame->AddLandmark(make_shared<Landmark>(landmark));

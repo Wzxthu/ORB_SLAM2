@@ -85,7 +85,7 @@ public:
 
     // Landmark functions
     void AddLandmark(std::shared_ptr<Landmark> pLandmark);
-    std::vector<std::shared_ptr<Landmark>> GetLandmarks() const;
+    std::vector<std::shared_ptr<Landmark>> GetLandmarks();
 
     // MapPoint observation functions
     void AddMapPoint(MapPoint* pMP, const size_t &idx);

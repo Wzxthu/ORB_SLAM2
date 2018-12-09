@@ -197,7 +197,7 @@ void FrameDrawer::Update(Tracking* pTracker)
     mState = static_cast<int>(pTracker->mLastProcessedState);
 }
 
-void FrameDrawer::UpdateKeyframe(const KeyFrame* keyFrame, const vector<Object>& objects2D)
+void FrameDrawer::UpdateKeyframe(KeyFrame* keyFrame, const vector<Object>& objects2D)
 {
     unique_lock<mutex> lock(mMutex);
     mKeyframeIm = keyFrame->mImColor.clone();
@@ -205,7 +205,7 @@ void FrameDrawer::UpdateKeyframe(const KeyFrame* keyFrame, const vector<Object>&
         ObjectDetector::DrawPred(mKeyframeIm, obj.bbox, obj.classIdx, obj.conf);
     }
 
-    mpLandmarks = keyFrame->mpLandmarks;
+    mpLandmarks = keyFrame->GetLandmarks();
 }
 
 } //namespace ORB_SLAM

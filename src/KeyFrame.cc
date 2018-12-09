@@ -630,7 +630,7 @@ void KeyFrame::AddLandmark(std::shared_ptr<Landmark> pLandmark)
     mpLandmarks.emplace_back(pLandmark);
 }
 
-std::vector<std::shared_ptr<Landmark>> KeyFrame::GetLandmarks() const
+std::vector<std::shared_ptr<Landmark>> KeyFrame::GetLandmarks()
 {
     unique_lock<mutex> lock(mMutexFeatures);
     return mpLandmarks;
