@@ -18,6 +18,8 @@
  */
 
 #include "Landmark.h"
+#include <opencv2/core/eigen.hpp>
+#include "Thirdparty/g2o/g2o/types/slam3d/se3quat.h"
 
 #include <mutex>
 
@@ -37,6 +39,9 @@ Landmark::Landmark(Landmark& other)
 void Landmark::SetDimension(const LandmarkDimension& dimension)
 {
     unique_lock<mutex> lock(mMutexPose);
+    mCuboid.scale[0] = dimension.edge13;
+    mCuboid.scale[1] = dimension.edge12;
+    mCuboid.scale[2] = dimension.height;
     mDimension = dimension;
 }
 
@@ -58,6 +63,10 @@ void Landmark::SetPose(const Mat& Tlw_)
     Twl = Mat::eye(4, 4, Tlw.type());
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
+
+    Eigen::Matrix<double, 4, 4> homogeneous_matrix;
+    cv::cv2eigen(Twl, homogeneous_matrix);
+    mCuboid.pose = g2o::SE3Quat(homogeneous_matrix.block(0,0,3,3), homogeneous_matrix.col(3).head(3));
 }
 
 void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
@@ -68,6 +77,14 @@ void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 
     Tlw = TFromRt(Rlw, tlw);
     Twl = TFromRt(Rwl, Lw);
+}
+
+void Landmark::SetPoseAndDimension(const g2o::cuboid Cuboid_)
+{
+    cv::eigen2cv(Cuboid_.pose.to_homogeneous_matrix(), Twl);
+    Eigen::Vector3d scale = Cuboid_.scale;
+    SetDimension(LandmarkDimension(scale[1], scale[2], scale[0]));
+
 }
 
 Point2f Landmark::GetProjectedCentroid(const Mat& Tcw)
@@ -107,34 +124,10 @@ Mat Landmark::GetTranslation()
     return Tlw.rowRange(0, 3).col(3).clone();
 }
 
-Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
+g2o::cuboid Landmark::GetCuboid()
 {
     unique_lock<mutex> lock(mMutexPose);
-    Cuboid2D cuboid;
-    auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
-    Mat Tcl = Tcw * Twl;
-    Mat Rcl = Tcl.rowRange(0, 3).colRange(0, 3);
-    auto d1 = Rcl.col(0) * mDimension.edge13;
-    auto d3 = Rcl.col(1) * mDimension.edge18;
-    auto d2 = Rcl.col(2) * mDimension.edge12;
-
-    Mat corners3D[8] {
-        centroid + d1 - d2 - d3,
-        centroid - d1 - d2 - d3,
-        centroid + d1 + d2 - d3,
-        centroid - d1 + d2 - d3,
-        centroid - d1 + d2 + d3,
-        centroid + d1 + d2 + d3,
-        centroid - d1 - d2 + d3,
-        centroid + d1 - d2 + d3,
-    };
-
-    for (int i = 0; i < 8; ++i)
-        cuboid.corners[i] = PointFrom2DHomo(K * corners3D[i]);
-    cuboid.valid = true;
-    cuboid.Rlc = Rcl.t();
-
-    return cuboid;
+    return mCuboid;
 }
 
 }

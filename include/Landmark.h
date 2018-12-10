@@ -20,7 +20,8 @@
 #ifndef LANDMARK_H
 #define LANDMARK_H
 
-#include "Cuboid.h"
+#include <opencv2/opencv.hpp>
+#include <g2o_Object.h>
 
 namespace ORB_SLAM2 {
 
@@ -50,15 +51,18 @@ public:
     void SetDimension(const LandmarkDimension& dimension);
     LandmarkDimension GetDimension();
     void SetPose(const cv::Mat& Tlw_);
-    void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
+    void SetPose(const cv::Mat& Rlw_, const cv::Mat& tlw_);
+    void SetPoseAndDimension(const g2o::cuboid Cuboid_);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetCentroid();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
+    g2o::cuboid GetCuboid();
     cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
     std::unordered_map<int, cv::Point2f> bboxCenter;
-    Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
+    g2o::VertexCuboid* cube_vertex;
+    float meas_quality;
 public:
     int classIdx;
     int landmarkID;
@@ -70,6 +74,7 @@ private:
     cv::Mat Lw;
     // Landmark dimension.
     LandmarkDimension mDimension;
+    g2o::cuboid mCuboid;  //cube_value
 
     std::mutex mMutexPose;
 };
