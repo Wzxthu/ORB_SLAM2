@@ -42,6 +42,12 @@ struct Dimension3D {
     friend std::ostream& operator<<(std::ostream& out, const Dimension3D& dim);
 };
 
+inline std::ostream& operator<<(std::ostream& out, const Dimension3D& dim)
+{
+    out << '[' << dim.edge18 << 'x' << dim.edge12 << 'x' << dim.edge13 << ']';
+    return out;
+}
+
 // Represent the cuboid proposal with the coordinates in frame of the 8 corners.
 struct Cuboid2D {
     cv::Mat Rlc;

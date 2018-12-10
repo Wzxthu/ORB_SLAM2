@@ -20,6 +20,7 @@
 #include "Landmark.h"
 
 #include <mutex>
+#include <include/Landmark.h>
 
 using namespace std;
 using namespace cv;
@@ -34,21 +35,38 @@ Landmark::Landmark(Landmark& other)
     SetDimension(other.GetDimension());
 }
 
-void Landmark::SetDimension(const Dimension3D& dimension)
-{
-    unique_lock<mutex> lock(mMutexPose);
-    mDimension = dimension;
-}
-
 Dimension3D Landmark::GetDimension()
 {
     unique_lock<mutex> lock(mMutexPose);
     return mDimension;
 }
 
+void Landmark::SetDimension(const Dimension3D& dimension)
+{
+    unique_lock<mutex> lock(mMutexPose);
+    SetDimensionNoLock(dimension);
+}
+
 void Landmark::SetPose(const Mat& Tlw_)
 {
     unique_lock<mutex> lock(mMutexPose);
+    SetPoseNoLock(Tlw_);
+}
+
+void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
+{
+    unique_lock<mutex> lock(mMutexPose);
+    SetPoseNoLock(Rlw, tlw);
+}
+
+
+void Landmark::SetDimensionNoLock(const Dimension3D& dimension)
+{
+    mDimension = dimension;
+}
+
+void Landmark::SetPoseNoLock(const Mat& Tlw_)
+{
     Tlw_.copyTo(Tlw);
     Mat Rlw = Tlw.rowRange(0, 3).colRange(0, 3);
     Mat tlw = Tlw.rowRange(0, 3).col(3);
@@ -60,9 +78,8 @@ void Landmark::SetPose(const Mat& Tlw_)
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 }
 
-void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
+void Landmark::SetPoseNoLock(const Mat& Rlw, const Mat& tlw)
 {
-    unique_lock<mutex> lock(mMutexPose);
     Mat Rwl = Rlw.t();
     Lw = -Rwl * tlw;
 
@@ -118,15 +135,15 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     auto d3 = Rlc.col(1) * mDimension.edge18 / 2;
     auto d2 = Rlc.col(2) * mDimension.edge12 / 2;
 
-    Mat corners3D[8] {
-        centroid + d1 + d2 - d3,
-        centroid - d1 + d2 - d3,
-        centroid + d1 - d2 - d3,
-        centroid - d1 - d2 - d3,
-        centroid - d1 - d2 + d3,
-        centroid + d1 - d2 + d3,
-        centroid - d1 + d2 + d3,
-        centroid + d1 + d2 + d3,
+    Mat corners3D[8]{
+            centroid + d1 + d2 - d3,
+            centroid - d1 + d2 - d3,
+            centroid + d1 - d2 - d3,
+            centroid - d1 - d2 - d3,
+            centroid - d1 - d2 + d3,
+            centroid + d1 - d2 + d3,
+            centroid - d1 + d2 + d3,
+            centroid + d1 + d2 + d3,
     };
 
     for (int i = 0; i < 8; ++i)
@@ -136,6 +153,44 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     cuboid.Rlc = Rlc;
 
     return cuboid;
+}
+
+Landmark::Landmark(const Cuboid2D& proposal, const Rect& bbox, KeyFrame* pKF, const cv::Mat& invK, int classIdx)
+        :mClassIdx(classIdx)
+{
+    auto mapPoints = pKF->GetMapPointMatches();
+
+    // Use the weighted average depth as the centroid depth.
+    Mat worldAvgPos = Mat::zeros(3, 1, CV_32F);
+    auto centroid = proposal.GetCentroid();
+    float weightSum = 0;
+    for (auto mapPoint : mapPoints) {
+        if (mapPoint != nullptr) {
+            auto pos2D = pKF->mvKeysUn[mapPoint->GetObservations()[pKF]].pt;
+            if (Inside(pos2D, bbox)) {
+                auto worldPos = mapPoint->GetWorldPos();
+                float weight = exp(-Distance(centroid, pos2D));
+                worldAvgPos += worldPos * weight;
+                weightSum += weight;
+            }
+        }
+    }
+    worldAvgPos /= weightSum;
+    Mat camCoordAvgPos = pKF->GetRotation() * worldAvgPos + pKF->GetTranslation();
+    float centroidDepth = camCoordAvgPos.at<float>(2);
+
+    // Recover pose.
+    Mat centroid3D = proposal.GetCentroid3D(centroidDepth, invK);
+    Mat worldCentroid = pKF->GetRotation() * centroid3D + pKF->GetTranslation();
+    Mat Rlw = proposal.Rlc * pKF->GetRotation();
+    Mat tlw = -Rlw * worldCentroid;
+    SetPoseNoLock(Rlw, tlw);
+
+    // Recover the dimension of the landmark with the centroid and the proposal.
+    auto dimension = proposal.GetDimension3D(centroid3D, invK);
+    SetDimensionNoLock(dimension);
+
+    bboxCenter[pKF->mnFrameId] = proposal.GetCentroid();
 }
 
 }

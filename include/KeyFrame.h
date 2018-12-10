@@ -41,6 +41,7 @@ class Map;
 class MapPoint;
 class Frame;
 class KeyFrameDatabase;
+class Landmark;
 
 class KeyFrame
 {
