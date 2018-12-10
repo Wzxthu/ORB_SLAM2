@@ -66,7 +66,7 @@ private:
     Tracking* mpTracker;
 
     // 1/fps in ms
-    double mT;
+    int mT;
     float mImageWidth, mImageHeight;
 
     float mViewpointX, mViewpointY, mViewpointZ, mViewpointF;
