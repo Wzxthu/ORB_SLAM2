@@ -30,24 +30,6 @@
 
 namespace ORB_SLAM2 {
 
-template<class T>
-inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
-{
-    return powf(pt1.x - pt2.x, 2) + powf(pt1.y - pt2.y, 2);
-}
-
-template<class T1, class T2>
-inline bool Inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
-{
-    return pt.x >= bbox.x && pt.x <= bbox.x + bbox.width && pt.y >= bbox.y && pt.y <= bbox.y + bbox.height;
-}
-
-template<class T>
-inline float Distance(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
-{
-    return sqrtf(DistanceSquare(pt1, pt2));
-}
-
 inline float Distance(const cv::Point2f& pt, const LineSegment& edge)
 {
     cv::Vec2f v1(edge.first.x - pt.x, edge.first.y - pt.y);

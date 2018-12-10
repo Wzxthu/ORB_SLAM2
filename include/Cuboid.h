@@ -42,11 +42,17 @@ struct Dimension3D {
     friend std::ostream& operator<<(std::ostream& out, const Dimension3D& dim);
 };
 
+inline std::ostream& operator<<(std::ostream& out, const Dimension3D& dim)
+{
+    out << '[' << dim.edge18 << 'x' << dim.edge12 << 'x' << dim.edge13 << ']';
+    return out;
+}
+
 // Represent the cuboid proposal with the coordinates in frame of the 8 corners.
 struct Cuboid2D {
     cv::Mat Rlc;
     cv::Point2f corners[8];
-    bool isCornerVisible[8]{true, true, true, true, true, true, true, true};
+    bool isCornerVisible[8]{};
     bool valid = false;
 
     friend std::ostream& operator<<(std::ostream& out, const Cuboid2D& cuboid);
@@ -67,9 +73,9 @@ struct Cuboid2D {
 
     cv::Mat GetCentroid3D(float depth, const cv::Mat& invK) const;
 
-    Dimension3D ComputeDimension3D(const cv::Mat& centroid3D, const cv::Mat& invK) const;
-    inline Dimension3D ComputeDimension3D(float centroidDepth, const cv::Mat& invK) const {
-        return ComputeDimension3D(GetCentroid3D(centroidDepth, invK), invK);
+    Dimension3D GetDimension3D(const cv::Mat& centroid3D, const cv::Mat& invK) const;
+    inline Dimension3D GetDimension3D(float centroidDepth, const cv::Mat& invK) const {
+        return GetDimension3D(GetCentroid3D(centroidDepth, invK), invK);
     }
 };
 

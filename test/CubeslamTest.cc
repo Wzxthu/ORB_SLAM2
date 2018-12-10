@@ -26,6 +26,7 @@ int main()
             "data/cubeslam_test_example_2.png",
             "data/cubeslam_test_example_3.png",
             "data/cubeslam_test_example_4.png",
+            "data/cubeslam_test_example_5.png",
     };
 
     string testInfoPaths[]{
@@ -34,9 +35,10 @@ int main()
             "data/cubeslam_test_example_2_info.txt",
             "data/cubeslam_test_example_3_info.txt",
             "data/cubeslam_test_example_4_info.txt",
+            "data/cubeslam_test_example_5_info.txt",
     };
 
-    const float alignErrWeight = 4, shapeErrWeight = 0.1, shapeErrThresh = 4.f;
+    const float alignErrWeight = 6, shapeErrWeight = 1, shapeErrThresh = 4.f;
 
     auto objectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights",
                                              .45, .6, 224 * 224);
@@ -46,6 +48,7 @@ int main()
     high_resolution_clock::time_point t1 = high_resolution_clock::now();
     for (int i = 0; i < sizeof(testImgPaths) / sizeof(string); ++i) {
         auto img = imread(testImgPaths[i]);
+
         Mat canvas = img.clone();
         Mat imGray;
         cvtColor(img, imGray, cv::COLOR_RGB2GRAY);
@@ -114,7 +117,7 @@ int main()
                      << " Pitch=" << theta[2] * 180 / M_PI_F << endl;
 
                 // Draw cuboid proposal
-                proposal.Draw(canvas, K);
+                proposal.Draw(canvas, K, Scalar(128, 128, 128));
             }
 
             Landmark landmark;
@@ -124,13 +127,13 @@ int main()
             landmark.SetPose(proposal.Rlc, -proposal.Rlc * camCoordCentroid);
 
             // Recover the dimension of the landmark with the centroid and the proposal.
-            auto dimension = proposal.ComputeDimension3D(camCoordCentroid, invK);
+            auto dimension = proposal.GetDimension3D(camCoordCentroid, invK);
             landmark.SetDimension(dimension);
 
             cout << dimension << endl;
 
             auto projCuboid = landmark.Project(Mat::eye(4, 4, CV_32F), K);
-            projCuboid.Draw(canvas, K, Scalar(128, 128, 128));
+            projCuboid.Draw(canvas, K);
 
             cout << proposal << endl;
             cout << projCuboid << endl << endl;

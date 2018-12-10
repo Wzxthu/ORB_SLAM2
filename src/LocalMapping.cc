@@ -535,7 +535,10 @@ void LocalMapping::SearchInNeighbors()
             // See if this landmark is visible in the current keyframe.
             auto Lc_z = Rcw_z.dot(pLandmark->GetCentroid()) + tcw_z;
             if (Lc_z > 0) {
-                mpCurrentKeyFrame->AddLandmark(pLandmark);
+                auto projCentroid = pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose(),
+                                                                    mpCurrentKeyFrame->mK);
+                if (mpCurrentKeyFrame->IsInImage(projCentroid.x, projCentroid.y))
+                    mpCurrentKeyFrame->AddLandmark(pLandmark);
             }
         }
     }
@@ -787,12 +790,13 @@ void LocalMapping::FindLandmarks()
     }
 
     t1 = high_resolution_clock::now();
+    int bboxSizeThresh = min(mpCurrentKeyFrame->mImColor.rows, mpCurrentKeyFrame->mImColor.cols) / 10;
     for (int objId = 0; objId < objects2D.size(); ++objId) {
         const auto object = objects2D[objId];
         auto& bbox = object.bbox;
 
         // Ignore objects that are too small.
-        if (bbox.width <= 96 || bbox.height <= 96)
+        if (bbox.width < bboxSizeThresh || bbox.height < bboxSizeThresh)
             continue;
 
         // Draw the bounding bbox.
@@ -829,11 +833,6 @@ void LocalMapping::FindLandmarks()
             }
         }
 
-        Landmark landmark;
-        landmark.classIdx = object.classIdx;
-        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] = Point2f(bbox.x + bbox.width * .5f,
-                                                                    bbox.y + bbox.height * .5f);
-
         // Find landmarks with respect to the detected objects.
         auto proposal = FindBestProposal(bbox, segsInBbox, K,
                                          mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
@@ -846,38 +845,8 @@ void LocalMapping::FindLandmarks()
 
         proposal.Draw(canvas, K);
 
-        // Reason the pose and dimension of the landmark from the best proposal.
-        // Approximate the depth of the centroid to be the average of the map points that fall in the bounding box.
-        auto mapPoints = mpCurrentKeyFrame->GetMapPointMatches();
-        vector<MapPoint*> includedMapPoints;
-        includedMapPoints.reserve(mapPoints.size());
-        for (auto& mapPoint : mpCurrentKeyFrame->GetMapPoints()) {
-            const auto& pt = mpCurrentKeyFrame->mvKeysUn[mapPoint->GetObservations()[mpCurrentKeyFrame]].pt;
-            if (pt.inside(bbox)) {
-                includedMapPoints.emplace_back(mapPoint);
-            }
-        }
-        Mat worldAvgPos = (Mat_<float>(4, 1, CV_32F) << 0, 0, 0, 1);
-        for (auto mapPoint : includedMapPoints) {
-            worldAvgPos.rowRange(0, 3) += mapPoint->GetWorldPos();
-        }
-        worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
-        Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
-        float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-
-        // Recover pose.
-        Mat centroid3D = proposal.GetCentroid3D(avgDepth, invK);
-        Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * centroid3D + mpCurrentKeyFrame->GetTranslation();
-        Mat Rlw = proposal.Rlc * mpCurrentKeyFrame->GetRotation();
-        Mat tlw = -Rlw * worldCentroid;
-        landmark.SetPose(Rlw, tlw);
-
-        // Recover the dimension of the landmark with the centroid and the proposal.
-        auto dimension = proposal.ComputeDimension3D(centroid3D, invK);
-        landmark.SetDimension(dimension);
-
         // Store the pose corresponding to best proposal into the keyframe.
-        mpCurrentKeyFrame->AddLandmark(make_shared<Landmark>(landmark));
+        mpCurrentKeyFrame->AddLandmark(make_shared<Landmark>(proposal, bbox, mpCurrentKeyFrame, invK, object.classIdx));
     }
     t2 = high_resolution_clock::now();
     timeSpan = duration_cast<duration<double>>(t2 - t1);

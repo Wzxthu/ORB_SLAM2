@@ -634,9 +634,9 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>( pLandmark->cube_vertex ));
                         e->setMeasurement(pKFi->landmarkMeas[pLandmark->landmarkID]);
                         e->setId(pKFi->mnId);
-                        Vector9d inv_sigma;inv_sigma<<1,1,1,1,1,1,1,1,1;
+                        Eigen::Vector9d inv_sigma;inv_sigma<<1,1,1,1,1,1,1,1,1;
                         inv_sigma = inv_sigma*2.0*pLandmark->meas_quality;
-                        Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
+                        Eigen::Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
                         e->setInformation(info);
                         optimizer.addEdge(e);
                     }

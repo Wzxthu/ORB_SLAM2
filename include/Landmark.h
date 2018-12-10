@@ -16,45 +16,49 @@
  * You should have received a copy of the GNU General Public License
  * along with this program.  If not, see <http://www.gnu.org/licenses/>.
  */
+#pragma once
 
 #ifndef LANDMARK_H
 #define LANDMARK_H
 
 #include "Cuboid.h"
-#include <opencv2/opencv.hpp>
+#include "KeyFrame.h"
+#include "MapPoint.h"
+
 #include <g2o_Object.h>
 
 namespace ORB_SLAM2 {
 
-inline std::ostream& operator<<(std::ostream& out, const Dimension3D& dim)
-{
-    out << '[' << dim.edge18 << 'x' << dim.edge12 << 'x' << dim.edge13 << ']';
-    return out;
-}
+class MapPoint;
+class KeyFrame;
 
 class Landmark {
 public:
-    Landmark();
-    Landmark(Landmark& other);
-
-    void SetDimension(const Dimension3D& dimension);
-    Dimension3D GetDimension();
-    void SetPose(const cv::Mat& Tlw_);
-    void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
-    void SetPoseAndDimension(const g2o::cuboid Cuboid_);
-    cv::Mat GetPose();
-    cv::Mat GetPoseInverse();
-    cv::Mat GetCentroid();
-    cv::Mat GetRotation();
-    cv::Mat GetTranslation();
-    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw, const cv::Mat& K);
-    g2o::cuboid GetCuboid();
     std::unordered_map<int, cv::Point2f> bboxCenter;
-    Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
     g2o::VertexCuboid* cube_vertex;
     float meas_quality;
 public:
-    int classIdx;
+    Landmark();
+    Landmark(Landmark& other);
+    Landmark(const Cuboid2D& proposal, const cv::Rect& bbox, KeyFrame* pKF, const cv::Mat& invK, int classIdx);
+
+    void SetDimension(const Dimension3D& dimension);
+    void SetPose(const cv::Mat& Tlw_);
+    void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
+    Dimension3D GetDimension();
+    void SetPoseAndDimension(const g2o::cuboid& Cuboid_);
+    cv::Mat GetPose();
+    cv::Mat GetPoseInverse();
+    cv::Mat GetRotation();
+    cv::Mat GetTranslation();
+
+    cv::Mat GetCentroid();
+    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw, const cv::Mat& K);
+
+    g2o::cuboid GetCuboid();
+    Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
+public:
+    int mClassIdx;
     int landmarkID;
 private:
     // SE3 Pose.
@@ -67,6 +71,10 @@ private:
     g2o::cuboid mCuboid;  //cube_value
 
     std::mutex mMutexPose;
+
+    void SetDimensionNoLock(const Dimension3D& dimension);
+    void SetPoseNoLock(const cv::Mat& Tlw_);
+    void SetPoseNoLock(const cv::Mat& Rlw, const cv::Mat& tlw);
 };
 
 inline cv::Mat TFromRt(const cv::Mat& R, const cv::Mat& t)
@@ -75,6 +83,24 @@ inline cv::Mat TFromRt(const cv::Mat& R, const cv::Mat& t)
     R.copyTo(T.rowRange(0, 3).colRange(0, 3));
     t.copyTo(T.col(3).rowRange(0, 3));
     return T;
+}
+
+template<class T>
+inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
+{
+    return powf(pt1.x - pt2.x, 2) + powf(pt1.y - pt2.y, 2);
+}
+
+template<class T>
+inline float Distance(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
+{
+    return sqrtf(DistanceSquare(pt1, pt2));
+}
+
+template<class T1, class T2>
+inline bool Inside(const cv::Point_<T1>& pt, const cv::Rect_<T2>& bbox)
+{
+    return pt.x >= bbox.x && pt.x <= bbox.x + bbox.width && pt.y >= bbox.y && pt.y <= bbox.y + bbox.height;
 }
 
 }
