@@ -183,7 +183,7 @@ Landmark::Landmark(const Cuboid2D& proposal, float proposalQuality, const Object
     auto centroid = proposal.GetCentroid();
     float weightSum = 0;
     for (auto mapPoint : mapPoints) {
-        if (mapPoint != nullptr) {
+        if (mapPoint) {
             auto pos2D = pKF->mvKeysUn[mapPoint->GetObservations()[pKF]].pt;
             if (Inside(pos2D, object.bbox)) {
                 auto worldPos = mapPoint->GetWorldPos();
