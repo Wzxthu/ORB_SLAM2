@@ -783,7 +783,7 @@ void LocalMapping::FindLandmarks()
     auto landmarks = mpCurrentKeyFrame->GetLandmarks();
     projCenters.reserve(landmarks.size());
     for (const auto& pLandmark : landmarks) {
-        projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose()));
+        projCenters.emplace_back(pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose(), K));
     }
 
     t1 = high_resolution_clock::now();

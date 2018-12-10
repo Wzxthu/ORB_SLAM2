@@ -70,9 +70,9 @@ void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
     Twl = TFromRt(Rwl, Lw);
 }
 
-Point2f Landmark::GetProjectedCentroid(const Mat& Tcw)
+Point2f Landmark::GetProjectedCentroid(const Mat& Tcw, const Mat& K)
 {
-    Mat centroidHomo = Tcw.rowRange(0, 3).colRange(0, 3) * GetCentroid() + Tcw.rowRange(0, 3).col(3);
+    Mat centroidHomo = K * (Tcw.rowRange(0, 3).colRange(0, 3) * GetCentroid() + Tcw.rowRange(0, 3).col(3));
     return Point2f(centroidHomo.at<float>(0) / centroidHomo.at<float>(2),
                    centroidHomo.at<float>(1) / centroidHomo.at<float>(2));
 }

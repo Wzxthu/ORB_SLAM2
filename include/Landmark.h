@@ -44,7 +44,7 @@ public:
     cv::Mat GetCentroid();
     cv::Mat GetRotation();
     cv::Mat GetTranslation();
-    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw);
+    cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw, const cv::Mat& K);
     std::unordered_map<int, cv::Point2f> bboxCenter;
     Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
 public:
