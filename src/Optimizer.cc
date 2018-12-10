@@ -480,7 +480,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
 
     // Set Local KeyFrame vertices
     int offset = 0;
-    std::unordered_set<std::shared_ptr<Landmark>> lLocalLandmarks;
+    unordered_set<shared_ptr<Landmark>> lLocalLandmarks;
     for (auto pKFi : lLocalKeyFrames) {
         offset = offset > pKFi->mnId ? offset : pKFi->mnId;
         auto landmarks = pKFi->GetLandmarks();
@@ -542,11 +542,11 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
     vector<MapPoint*> vpMapPointEdgeStereo;
     vpMapPointEdgeStereo.reserve(nExpectedSize);
 
-    const float thHuberMono = sqrt(5.991);
-    const float thHuberStereo = sqrt(7.815);
+    const float thHuberMono = sqrtf(5.991f);
+    const float thHuberStereo = sqrtf(7.815f);
 
     for (auto pMP : lLocalMapPoints) {
-        g2o::VertexSBAPointXYZ* vPoint = new g2o::VertexSBAPointXYZ();
+        auto* vPoint = new g2o::VertexSBAPointXYZ();
         vPoint->setEstimate(Converter::toVector3d(pMP->GetWorldPos()));
         int id = pMP->mnId + maxKFid + 1;
         vPoint->setId(id);
@@ -592,17 +592,16 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
                     // add g2o camera-object measurement edges, if there is
                     auto landmarks = pKFi->GetLandmarks();
                     for (const auto& pLandmark : landmarks) {
-                        auto* e = new g2o::EdgeSE3Cuboid();
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(
-                                offset + 1 + pLandmark->mnLandmarkId)));
-                        e->setMeasurement(pKFi->landmarkMeasurements[pLandmark->mnLandmarkId]);
+                        auto* cuboid = new g2o::EdgeSE3Cuboid();
+                        cuboid->setVertex(0, optimizer.vertex(pKFi->mnId));
+                        cuboid->setVertex(1, optimizer.vertex(offset + 1 + pLandmark->mnLandmarkId));
+                        cuboid->setMeasurement(pKFi->landmarkMeasurements[pLandmark->mnLandmarkId]);
                         Eigen::Vector9d inv_sigma;
                         inv_sigma << 1, 1, 1, 1, 1, 1, 1, 1, 1;
                         inv_sigma = inv_sigma * 2.0 * pLandmark->mQuality;
                         Eigen::Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
-                        e->setInformation(info);
-                        optimizer.addEdge(e);
+                        cuboid->setInformation(info);
+                        optimizer.addEdge(cuboid);
                     }
                 }
                 else // Stereo observation

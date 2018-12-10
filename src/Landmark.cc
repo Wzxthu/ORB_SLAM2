@@ -172,8 +172,9 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     return cuboid;
 }
 
-Landmark::Landmark(const Cuboid2D& proposal, const Object& object, KeyFrame* pKF, const cv::Mat& invK)
-        :mQuality(object.conf), mClassIdx(object.classIdx), mnLandmarkId(landmarkCnt++)
+Landmark::Landmark(const Cuboid2D& proposal, float proposalQuality, const Object& object,
+                   KeyFrame* pKF, const cv::Mat& invK)
+        :mQuality(object.conf * proposalQuality), mClassIdx(object.classIdx), mnLandmarkId(landmarkCnt++)
 {
     auto mapPoints = pKF->GetMapPointMatches();
 

@@ -163,7 +163,7 @@ Cuboid2D FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>&
                           float rollRange = 45 * M_PI_F / 180,
                           float pitchRange = 45 * M_PI_F / 180,
                           unsigned long frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
-                          bool display = false, bool save = false);
+                          bool display = false, bool save = false, float* quality = nullptr);
 
 }
 

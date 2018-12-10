@@ -134,7 +134,7 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                           float refRoll, float refPitch,
                           float rollRange, float pitchRange,
                           const unsigned long frameId, int objId, const Mat& image,
-                          bool display, bool save)
+                          bool display, bool save, float* quality)
 {
     auto distMap = PrecomputeChamferDistMap(bbox, lineSegs);
 
@@ -249,6 +249,9 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
                             canvas);
             }
         }
+
+        if (quality)
+            *quality = bestErr;
     }
 
     return candidates[bestProposalIdx];
