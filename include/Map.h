@@ -17,12 +17,14 @@
 * You should have received a copy of the GNU General Public License
 * along with ORB-SLAM2. If not, see <http://www.gnu.org/licenses/>.
 */
+#pragma once
 
 #ifndef MAP_H
 #define MAP_H
 
 #include "MapPoint.h"
 #include "KeyFrame.h"
+#include "Landmark.h"
 #include <set>
 
 #include <mutex>
@@ -33,6 +35,7 @@ namespace ORB_SLAM2
 
 class MapPoint;
 class KeyFrame;
+class Landmark;
 
 class Map
 {
@@ -41,6 +44,7 @@ public:
 
     void AddKeyFrame(KeyFrame* pKF);
     void AddMapPoint(MapPoint* pMP);
+    void AddLandmark(const std::shared_ptr<Landmark>& pLandmark);
     void EraseMapPoint(MapPoint* pMP);
     void EraseKeyFrame(KeyFrame* pKF);
     void SetReferenceMapPoints(const std::vector<MapPoint*> &vpMPs);
@@ -49,6 +53,7 @@ public:
 
     std::vector<KeyFrame*> GetAllKeyFrames();
     std::vector<MapPoint*> GetAllMapPoints();
+    std::vector<std::shared_ptr<Landmark>> GetAllLandmarks();
     std::vector<MapPoint*> GetReferenceMapPoints();
 
     long unsigned int MapPointsInMap();
@@ -68,6 +73,7 @@ public:
 protected:
     std::set<MapPoint*> mspMapPoints;
     std::set<KeyFrame*> mspKeyFrames;
+    std::set<std::shared_ptr<Landmark>> mspLandmarks;
 
     std::vector<MapPoint*> mvpReferenceMapPoints;
 

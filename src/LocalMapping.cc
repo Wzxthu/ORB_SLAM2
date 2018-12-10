@@ -846,7 +846,9 @@ void LocalMapping::FindLandmarks()
         proposal.Draw(canvas, K);
 
         // Store the pose corresponding to best proposal into the keyframe.
-        mpCurrentKeyFrame->AddLandmark(make_shared<Landmark>(proposal, bbox, mpCurrentKeyFrame, invK, object.classIdx));
+        auto pLandmark = make_shared<Landmark>(proposal, bbox, mpCurrentKeyFrame, invK, object.classIdx);
+        mpCurrentKeyFrame->AddLandmark(pLandmark);
+        mpMap->AddLandmark(pLandmark);
     }
     t2 = high_resolution_clock::now();
     timeSpan = duration_cast<duration<double>>(t2 - t1);
