@@ -34,6 +34,7 @@ class Landmark {
 public:
     Landmark();
     Landmark(Landmark& other);
+    Landmark(const Cuboid2D& proposal, const cv::Mat& invK, int classIdx);
 
     void SetDimension(const Dimension3D& dimension);
     Dimension3D GetDimension();

@@ -829,11 +829,6 @@ void LocalMapping::FindLandmarks()
             }
         }
 
-        Landmark landmark;
-        landmark.classIdx = object.classIdx;
-        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] = Point2f(bbox.x + bbox.width * .5f,
-                                                                    bbox.y + bbox.height * .5f);
-
         // Find landmarks with respect to the detected objects.
         auto proposal = FindBestProposal(bbox, segsInBbox, K,
                                          mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
@@ -865,6 +860,11 @@ void LocalMapping::FindLandmarks()
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
 
+        Landmark landmark;
+        landmark.classIdx = object.classIdx;
+        landmark.bboxCenter[mpCurrentKeyFrame->mnFrameId] = Point2f(bbox.x + bbox.width * .5f,
+                                                                    bbox.y + bbox.height * .5f);
+
         // Recover pose.
         Mat centroid3D = proposal.GetCentroid3D(avgDepth, invK);
         Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * centroid3D + mpCurrentKeyFrame->GetTranslation();
@@ -873,7 +873,7 @@ void LocalMapping::FindLandmarks()
         landmark.SetPose(Rlw, tlw);
 
         // Recover the dimension of the landmark with the centroid and the proposal.
-        auto dimension = proposal.ComputeDimension3D(centroid3D, invK);
+        auto dimension = proposal.GetDimension3D(centroid3D, invK);
         landmark.SetDimension(dimension);
 
         // Store the pose corresponding to best proposal into the keyframe.
