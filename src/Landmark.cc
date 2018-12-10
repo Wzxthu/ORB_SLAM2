@@ -18,6 +18,8 @@
  */
 
 #include "Landmark.h"
+#include <opencv2/core/eigen.hpp>
+#include "Converter.h"
 
 #include <mutex>
 
@@ -37,6 +39,9 @@ Landmark::Landmark(Landmark& other)
 void Landmark::SetDimension(const Dimension3D& dimension)
 {
     unique_lock<mutex> lock(mMutexPose);
+    mCuboid.scale[0] = dimension.edge13;
+    mCuboid.scale[1] = dimension.edge12;
+    mCuboid.scale[2] = dimension.edge18;
     mDimension = dimension;
 }
 
@@ -58,6 +63,8 @@ void Landmark::SetPose(const Mat& Tlw_)
     Twl = Mat::eye(4, 4, Tlw.type());
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
+
+    mCuboid.pose = ORB_SLAM2::Converter::toSE3Quat(Twl);
 }
 
 void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
@@ -68,6 +75,13 @@ void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 
     Tlw = TFromRt(Rlw, tlw);
     Twl = TFromRt(Rwl, Lw);
+}
+
+void Landmark::SetPoseAndDimension(const g2o::cuboid Cuboid_)
+{
+    Twl = ORB_SLAM2::Converter::toCvMat(Cuboid_.pose);
+    Eigen::Vector3d scale = Cuboid_.scale;
+    SetDimension(LandmarkDimension(scale[1], scale[2], scale[0]));
 }
 
 Point2f Landmark::GetProjectedCentroid(const Mat& Tcw, const Mat& K)
@@ -107,9 +121,7 @@ Mat Landmark::GetTranslation()
     return Tlw.rowRange(0, 3).col(3).clone();
 }
 
-Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
-{
-    unique_lock<mutex> lock(mMutexPose);
+Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K) {
     Cuboid2D cuboid;
     auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
     Mat Tcl = Tcw * Twl;
@@ -128,7 +140,6 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
         centroid - d1 + d2 + d3,
         centroid + d1 + d2 + d3,
     };
-
     for (int i = 0; i < 8; ++i)
         cuboid.corners[i] = PointFrom2DHomo(K * corners3D[i]);
 
@@ -136,6 +147,12 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     cuboid.Rlc = Rlc;
 
     return cuboid;
+}
+
+g2o::cuboid Landmark::GetCuboid()
+{
+    unique_lock<mutex> lock(mMutexPose);
+    return mCuboid;
 }
 
 }
