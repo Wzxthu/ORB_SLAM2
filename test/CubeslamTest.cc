@@ -114,25 +114,23 @@ int main()
                      << " Pitch=" << theta[2] * 180 / M_PI << endl;
 
                 // Draw cuboid proposal
-//                proposal.Draw(canvas, K);
+                proposal.Draw(canvas, K);
             }
 
             Landmark landmark;
 
-            auto centroid2D = proposal.GetCentroid();
-            Mat camCoordCentroid = invK * PointToHomo(centroid2D);
-            camCoordCentroid *= 100 / camCoordCentroid.at<float>(2, 0);
+            Mat camCoordCentroid = proposal.GetCentroid3D(100, invK);
 
             landmark.SetPose(proposal.Rlc, -proposal.Rlc * camCoordCentroid);
 
             // Recover the dimension of the landmark with the centroid and the proposal.
-            auto dimension = DimensionFromProposal(proposal, camCoordCentroid);
+            auto dimension = proposal.ComputeDimension3D(camCoordCentroid);
             landmark.SetDimension(dimension);
 
             cout << dimension << endl;
 
             auto projCuboid = landmark.Project(Mat::eye(4, 4, CV_32F), K);
-            projCuboid.Draw(canvas, K);
+            projCuboid.Draw(canvas, K, Scalar(128, 128, 128));
 
             cout << proposal << endl;
             cout << projCuboid << endl << endl;

@@ -34,13 +34,13 @@ Landmark::Landmark(Landmark& other)
     SetDimension(other.GetDimension());
 }
 
-void Landmark::SetDimension(const LandmarkDimension& dimension)
+void Landmark::SetDimension(const Dimension3D& dimension)
 {
     unique_lock<mutex> lock(mMutexPose);
     mDimension = dimension;
 }
 
-LandmarkDimension Landmark::GetDimension()
+Dimension3D Landmark::GetDimension()
 {
     unique_lock<mutex> lock(mMutexPose);
     return mDimension;
@@ -114,23 +114,25 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
     Mat Tcl = Tcw * Twl;
     Mat Rcl = Tcl.rowRange(0, 3).colRange(0, 3);
-    auto d1 = Rcl.col(0) * mDimension.edge13;
-    auto d3 = Rcl.col(1) * mDimension.edge18;
-    auto d2 = Rcl.col(2) * mDimension.edge12;
+    auto d1 = Rcl.col(0) * mDimension.edge13 / 2 / 5;
+    auto d3 = Rcl.col(1) * mDimension.edge18 / 2 / 5;
+    auto d2 = Rcl.col(2) * mDimension.edge12 / 2 / 5;
 
     Mat corners3D[8] {
-        centroid + d1 - d2 - d3,
-        centroid - d1 - d2 - d3,
         centroid + d1 + d2 - d3,
         centroid - d1 + d2 - d3,
-        centroid - d1 + d2 + d3,
-        centroid + d1 + d2 + d3,
+        centroid + d1 - d2 - d3,
+        centroid - d1 - d2 - d3,
         centroid - d1 - d2 + d3,
         centroid + d1 - d2 + d3,
+        centroid - d1 + d2 + d3,
+        centroid + d1 + d2 + d3,
     };
 
-    for (int i = 0; i < 8; ++i)
+    for (int i = 0; i < 8; ++i) {
         cuboid.corners[i] = PointFrom2DHomo(K * corners3D[i]);
+        cout << corners3D[i].t() << "\t->\t" << cuboid.corners[i] << endl;
+    }
     cuboid.valid = true;
     cuboid.Rlc = Rcl.t();
 

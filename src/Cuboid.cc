@@ -5,6 +5,30 @@ using namespace std;
 
 namespace ORB_SLAM2 {
 
+cv::Mat Cuboid2D::GetCentroid3D(float centroidDepth, const cv::Mat& invK) const
+{
+    auto centroid2D = GetCentroid();
+    Mat camCoordCentroid = invK * PointToHomo(centroid2D);
+    camCoordCentroid *= centroidDepth / camCoordCentroid.at<float>(2, 0);
+    return camCoordCentroid;
+}
+
+Dimension3D Cuboid2D::ComputeDimension3D(const cv::Mat& centroid3D) const
+{
+    auto center1368 = LineIntersection(corners[0], corners[5],
+                                       corners[2], corners[7]);
+    auto center1278 = LineIntersection(corners[2], corners[4],
+                                       corners[3], corners[5]);
+    auto center5678 = LineIntersection(corners[4], corners[7],
+                                       corners[5], corners[6]);
+
+    return {
+            2 * DistanceToRay(centroid3D, Rlc.col(0), PointToHomo(center1368)),
+            2 * DistanceToRay(centroid3D, Rlc.col(2), PointToHomo(center1278)),
+            2 * DistanceToRay(centroid3D, Rlc.col(1), PointToHomo(center5678)),
+    };
+}
+
 cv::Point2f Cuboid2D::GetCentroid() const
 {
     if (!IsParallel(corners[2], corners[6], corners[1], corners[5]))
@@ -44,18 +68,18 @@ void Cuboid2D::Draw(Mat& canvas, const Mat& K, const Scalar& edgeColor) const
     circle(canvas, vp2, 4, Scalar(0, 255, 0), 2);
     circle(canvas, vp3, 4, Scalar(255, 0, 0), 2);
 
-//    line(canvas, vp1, proposal.corners[0], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[2], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[5], Scalar(0, 0, 255));
-//    line(canvas, vp1, proposal.corners[7], Scalar(0, 0, 255));
-//    line(canvas, vp2, proposal.corners[0], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[1], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[6], Scalar(0, 255, 0));
-//    line(canvas, vp2, proposal.corners[7], Scalar(0, 255, 0));
-//    line(canvas, vp3, proposal.corners[4], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[5], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[6], Scalar(255, 0, 0));
-//    line(canvas, vp3, proposal.corners[7], Scalar(255, 0, 0));
+//    line(canvas, vp1, corners[0], Scalar(0, 0, 255));
+//    line(canvas, vp1, corners[2], Scalar(0, 0, 255));
+//    line(canvas, vp1, corners[5], Scalar(0, 0, 255));
+//    line(canvas, vp1, corners[7], Scalar(0, 0, 255));
+//    line(canvas, vp2, corners[0], Scalar(0, 255, 0));
+//    line(canvas, vp2, corners[1], Scalar(0, 255, 0));
+//    line(canvas, vp2, corners[6], Scalar(0, 255, 0));
+//    line(canvas, vp2, corners[7], Scalar(0, 255, 0));
+//    line(canvas, vp3, corners[4], Scalar(255, 0, 0));
+//    line(canvas, vp3, corners[5], Scalar(255, 0, 0));
+//    line(canvas, vp3, corners[6], Scalar(255, 0, 0));
+//    line(canvas, vp3, corners[7], Scalar(255, 0, 0));
 
     if (isCornerVisible[0] && isCornerVisible[1])
         line(canvas, corners[0], corners[1], edgeColor, 1 + (isCornerVisible[0] && isCornerVisible[1]), CV_AA);

@@ -24,19 +24,7 @@
 
 namespace ORB_SLAM2 {
 
-struct LandmarkDimension {
-    float edge13{};   // Corresponding to vanishing point 1.
-    float edge12{};   // Corresponding to vanishing point 2.
-    float edge18{};   // Corresponding to vanishing point 3.
-
-    inline LandmarkDimension() = default;
-    LandmarkDimension(float edge13_, float edge12_, float edge18_)
-            :edge13(edge13_), edge12(edge12_), edge18(edge18_) { }
-
-    friend std::ostream& operator<<(std::ostream& out, const LandmarkDimension& dim);
-};
-
-inline std::ostream& operator<<(std::ostream& out, const LandmarkDimension& dim)
+inline std::ostream& operator<<(std::ostream& out, const Dimension3D& dim)
 {
     out << '[' << dim.edge18 << 'x' << dim.edge12 << 'x' << dim.edge13 << ']';
     return out;
@@ -47,8 +35,8 @@ public:
     Landmark();
     Landmark(Landmark& other);
 
-    void SetDimension(const LandmarkDimension& dimension);
-    LandmarkDimension GetDimension();
+    void SetDimension(const Dimension3D& dimension);
+    Dimension3D GetDimension();
     void SetPose(const cv::Mat& Tlw_);
     void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
     cv::Mat GetPose();
@@ -69,7 +57,7 @@ private:
     // Landmark centroid.
     cv::Mat Lw;
     // Landmark dimension.
-    LandmarkDimension mDimension;
+    Dimension3D mDimension;
 
     std::mutex mMutexPose;
 };

@@ -30,16 +30,6 @@
 
 namespace ORB_SLAM2 {
 
-inline cv::Mat PointToHomo(const cv::Point2f& pt)
-{
-    return (cv::Mat_<float>(3, 1, CV_32F) << pt.x, pt.y, 1);
-}
-
-inline cv::Mat PointToHomo(const cv::Point3f& pt)
-{
-    return (cv::Mat_<float>(4, 1, CV_32F) << pt.x, pt.y, pt.z, 1);
-}
-
 template<class T>
 inline float DistanceSquare(const cv::Point_<T>& pt1, const cv::Point_<T>& pt2)
 {
@@ -81,30 +71,6 @@ inline float Distance(const cv::Point2f& pt, const LineSegment& edge)
         float h = l1l2 * sine / l3;
         return h;
     }
-}
-
-/**
- * Compute distance from a 3D point to a ray along the given direction.
- * @param pt3D 3x1 vector
- * @param direction 3x1 vector
- * @param ray 3x1 vector
- * @return distance
- */
-inline float DistanceToRay(const cv::Mat& pt3D, const cv::Mat& direction, const cv::Mat& ray)
-{
-    const float Px = pt3D.at<float>(0, 0);
-    const float Py = pt3D.at<float>(1, 0);
-    const float Pz = pt3D.at<float>(2, 0);
-    const float dx = direction.at<float>(0, 0);
-    const float dy = direction.at<float>(1, 0);
-    const float dz = direction.at<float>(2, 0);
-    const float rx = ray.at<float>(0, 0);
-    const float ry = ray.at<float>(1, 0);
-    const float rz = ray.at<float>(2, 0);
-    std::cout << "Dimension: " << (rz * Px - rx * Pz) / (rx * dz - rz * dx) << ' '
-              << (rz * Py - ry * Pz) / (ry * dz - rz * dy) << std::endl;
-    return ((rz * Px - rx * Pz) / (rx * dz - rz * dx) + (rz * Py - ry * Pz) / (ry * dz - rz * dy)) * .5f /
-           sqrtf(dx * dx + dy * dy + dz * dz);
 }
 
 inline float ChamferDist(const LineSegment& hypothesis,
@@ -216,8 +182,6 @@ Cuboid2D FindBestProposal(const cv::Rect& bbox, const std::vector<LineSegment*>&
                           float pitchRange = 45 * M_PI_F / 180,
                           unsigned long frameId = 0, int objId = 0, const cv::Mat& image = cv::Mat(),
                           bool display = false, bool save = false);
-
-LandmarkDimension DimensionFromProposal(const Cuboid2D& proposal, const cv::Mat& camCoordCentroid);
 
 }
 

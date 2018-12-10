@@ -864,18 +864,16 @@ void LocalMapping::FindLandmarks()
         worldAvgPos.rowRange(0, 3) /= includedMapPoints.size();
         Mat camCoordAvgPos = mpCurrentKeyFrame->GetPose() * worldAvgPos;
         float avgDepth = camCoordAvgPos.at<float>(2) / camCoordAvgPos.at<float>(3);
-        auto centroid2D = proposal.GetCentroid();
-        Mat camCoordCentroid = invK * PointToHomo(centroid2D);
-        camCoordCentroid *= avgDepth / camCoordCentroid.at<float>(2, 0);
 
         // Recover pose.
-        Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * camCoordCentroid + mpCurrentKeyFrame->GetTranslation();
+        Mat centroid3D = proposal.GetCentroid3D(avgDepth, invK);
+        Mat worldCentroid = mpCurrentKeyFrame->GetRotation() * centroid3D + mpCurrentKeyFrame->GetTranslation();
         Mat Rlw = proposal.Rlc * mpCurrentKeyFrame->GetRotation();
         Mat tlw = -Rlw * worldCentroid;
         landmark.SetPose(Rlw, tlw);
 
         // Recover the dimension of the landmark with the centroid and the proposal.
-        auto dimension = DimensionFromProposal(proposal, camCoordCentroid);
+        auto dimension = proposal.ComputeDimension3D(centroid3D);
         landmark.SetDimension(dimension);
 
         // Store the pose corresponding to best proposal into the keyframe.
