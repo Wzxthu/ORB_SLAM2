@@ -81,7 +81,7 @@ void Landmark::SetPoseAndDimension(const g2o::cuboid Cuboid_)
 {
     Twl = ORB_SLAM2::Converter::toCvMat(Cuboid_.pose);
     Eigen::Vector3d scale = Cuboid_.scale;
-    SetDimension(LandmarkDimension(scale[1], scale[2], scale[0]));
+    SetDimension(Dimension3D(scale[1], scale[2], scale[0]));
 }
 
 Point2f Landmark::GetProjectedCentroid(const Mat& Tcw, const Mat& K)

@@ -205,6 +205,7 @@ public:
 
     g2o::SE3Quat cam_pose_Tcw;	     // optimized pose  world to cam
     g2o::SE3Quat cam_pose_Twc;	     // optimized pose  cam to world
+    std::unordered_map<int, g2o::cuboid> landmarkMeas;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
