@@ -66,11 +66,11 @@ public:
     // actual error between two cuboids.
     inline Eigen::Vector9d logCubeError(const Cuboid& other) const
     {
-        Eigen::Vector9d res;
-        SE3Quat pose_diff = other.mPose.inverse() * this->mPose;
-        res.head<6>() = pose_diff.log();   //treat as se3 log error. could also just use yaw error
-        res.tail<3>() = this->mScale - other.mScale;
-        return res;
+        Eigen::Vector9d errVec;
+        SE3Quat poseDiff = other.mPose.inverse() * this->mPose;
+        errVec.head<6>() = poseDiff.log();   //treat as se3 log error. could also just use yaw error
+        errVec.tail<3>() = this->mScale - other.mScale;
+        return errVec;
     }
 
     // function called by g2o.
@@ -80,15 +80,16 @@ public:
         if (!whether_rotate_cubes)
             return logCubeError(other);
 
-        // NOTE rotating cuboid... since we cannot determine the front face consistenly, different front faces indicate different yaw, scale representation.
+        // NOTE rotating cuboid... since we cannot determine the front face consistently,
+        // different front faces indicate different yaw, scale representation.
         // need to rotate all 360 degrees (global cube might be quite different from local cube)
-        // this requires the sequential object insertion. In this case, object yaw practically should not change much. If we observe a jump, we can use code
-        // here to adjust the yaw.
+        // this requires the sequential object insertion. In this case, object yaw practically should not change much.
+        // If we observe a jump, we can use code here to adjust the yaw.
         Eigen::Vector4d rotate_errors_norm;
         Eigen::Vector4d rotate_angles(-1, 0, 1, 2); // rotate -90 0 90 180
         Eigen::Matrix<double, 9, 4> rotate_errors;
         for (int i = 0; i < rotate_errors_norm.rows(); i++) {
-            Cuboid rotated_cuboid = other.rotateCuboid(rotate_angles(i) * M_PI / 2.0);  // rotate new cuboids
+            Cuboid rotated_cuboid = other.rotateCuboid(rotate_angles(i) * M_PI_2);  // rotate new cuboids
             Eigen::Vector9d cuboid_error = this->logCubeError(rotated_cuboid);
             rotate_errors_norm(i) = cuboid_error.norm();
             rotate_errors.col(i) = cuboid_error;
@@ -105,10 +106,8 @@ public:
     inline Cuboid rotateCuboid(double yaw_angle) const // to deal with different front surface of cuboids
     {
         Cuboid res;
-        SE3Quat
-        rot(Eigen::Quaterniond(cos(yaw_angle *
-                                   0.5), 0, 0, sin(yaw_angle * 0.5)),
-            Eigen::Vector3d(0, 0, 0));   // change yaw to rotation.
+        // change yaw to rotation.
+        SE3Quat rot(Eigen::Quaterniond(cos(yaw_angle * 0.5), 0, 0, sin(yaw_angle * 0.5)), Eigen::Vector3d(0, 0, 0));
         res.mPose = this->mPose * rot;
         res.mScale = this->mScale;
         if ((yaw_angle == M_PI / 2.0) || (yaw_angle == -M_PI / 2.0) || (yaw_angle == 3 * M_PI / 2.0))
@@ -121,7 +120,7 @@ public:
     inline Cuboid transformFrom(const SE3Quat& Twc) const
     {
         Cuboid res;
-        res.mPose = Twc * this->mPose;
+        res.mPose = this->mPose.inverse() * Twc;
         res.mScale = this->mScale;
         return res;
     }
