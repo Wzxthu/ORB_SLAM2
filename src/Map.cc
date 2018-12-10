@@ -142,6 +142,8 @@ void Map::clear()
     mnMaxKFid = 0;
     mvpReferenceMapPoints.clear();
     mvpKeyFrameOrigins.clear();
+
+    cout << "Map cleared!" << endl;
 }
 
 } //namespace ORB_SLAM
