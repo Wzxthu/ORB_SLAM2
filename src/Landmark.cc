@@ -114,9 +114,9 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
     Mat Tcl = Tcw * Twl;
     Mat Rcl = Tcl.rowRange(0, 3).colRange(0, 3);
-    auto d1 = Rcl.col(0) * mDimension.edge13 / 2 / 5;
-    auto d3 = Rcl.col(1) * mDimension.edge18 / 2 / 5;
-    auto d2 = Rcl.col(2) * mDimension.edge12 / 2 / 5;
+    auto d1 = Rcl.col(0) * mDimension.edge13 / 2;
+    auto d3 = Rcl.col(1) * mDimension.edge18 / 2;
+    auto d2 = Rcl.col(2) * mDimension.edge12 / 2;
 
     Mat corners3D[8] {
         centroid + d1 + d2 - d3,

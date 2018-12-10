@@ -13,19 +13,16 @@ cv::Mat Cuboid2D::GetCentroid3D(float centroidDepth, const cv::Mat& invK) const
     return camCoordCentroid;
 }
 
-Dimension3D Cuboid2D::ComputeDimension3D(const cv::Mat& centroid3D) const
+Dimension3D Cuboid2D::ComputeDimension3D(const cv::Mat& centroid3D, const cv::Mat& invK) const
 {
-    auto center1368 = LineIntersection(corners[0], corners[5],
-                                       corners[2], corners[7]);
-    auto center1278 = LineIntersection(corners[2], corners[4],
-                                       corners[3], corners[5]);
-    auto center5678 = LineIntersection(corners[4], corners[7],
-                                       corners[5], corners[6]);
+    auto center1368 = LineIntersection(corners[0], corners[5], corners[2], corners[7]);
+    auto center1278 = LineIntersection(corners[2], corners[4], corners[3], corners[5]);
+    auto center5678 = LineIntersection(corners[4], corners[7], corners[5], corners[6]);
 
     return {
-            2 * DistanceToRay(centroid3D, Rlc.col(0), PointToHomo(center1368)),
-            2 * DistanceToRay(centroid3D, Rlc.col(2), PointToHomo(center1278)),
-            2 * DistanceToRay(centroid3D, Rlc.col(1), PointToHomo(center5678)),
+            2 * DistanceToRay(centroid3D, Rlc.col(0), invK * PointToHomo(center1368)),
+            2 * DistanceToRay(centroid3D, Rlc.col(2), invK * PointToHomo(center1278)),
+            2 * DistanceToRay(centroid3D, Rlc.col(1), invK * PointToHomo(center5678)),
     };
 }
 

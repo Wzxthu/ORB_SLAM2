@@ -124,7 +124,7 @@ int main()
             landmark.SetPose(proposal.Rlc, -proposal.Rlc * camCoordCentroid);
 
             // Recover the dimension of the landmark with the centroid and the proposal.
-            auto dimension = proposal.ComputeDimension3D(camCoordCentroid);
+            auto dimension = proposal.ComputeDimension3D(camCoordCentroid, invK);
             landmark.SetDimension(dimension);
 
             cout << dimension << endl;

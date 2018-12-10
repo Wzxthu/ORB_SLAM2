@@ -873,7 +873,7 @@ void LocalMapping::FindLandmarks()
         landmark.SetPose(Rlw, tlw);
 
         // Recover the dimension of the landmark with the centroid and the proposal.
-        auto dimension = proposal.ComputeDimension3D(centroid3D);
+        auto dimension = proposal.ComputeDimension3D(centroid3D, invK);
         landmark.SetDimension(dimension);
 
         // Store the pose corresponding to best proposal into the keyframe.

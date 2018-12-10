@@ -67,9 +67,9 @@ struct Cuboid2D {
 
     cv::Mat GetCentroid3D(float depth, const cv::Mat& invK) const;
 
-    Dimension3D ComputeDimension3D(const cv::Mat& centroid3D) const;
+    Dimension3D ComputeDimension3D(const cv::Mat& centroid3D, const cv::Mat& invK) const;
     inline Dimension3D ComputeDimension3D(float centroidDepth, const cv::Mat& invK) const {
-        return ComputeDimension3D(GetCentroid3D(centroidDepth, invK));
+        return ComputeDimension3D(GetCentroid3D(centroidDepth, invK), invK);
     }
 };
 
