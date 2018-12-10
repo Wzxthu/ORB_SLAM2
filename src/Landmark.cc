@@ -113,10 +113,10 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     Cuboid2D cuboid;
     auto centroid = Tcw.rowRange(0, 3).colRange(0, 3) * Lw + Tcw.rowRange(0, 3).col(3);
     Mat Tcl = Tcw * Twl;
-    Mat Rcl = Tcl.rowRange(0, 3).colRange(0, 3);
-    auto d1 = Rcl.col(0) * mDimension.edge13 / 2;
-    auto d3 = Rcl.col(1) * mDimension.edge18 / 2;
-    auto d2 = Rcl.col(2) * mDimension.edge12 / 2;
+    Mat Rlc = Tcl.rowRange(0, 3).colRange(0, 3).t();
+    auto d1 = Rlc.col(0) * mDimension.edge13 / 2;
+    auto d3 = Rlc.col(1) * mDimension.edge18 / 2;
+    auto d2 = Rlc.col(2) * mDimension.edge12 / 2;
 
     Mat corners3D[8] {
         centroid + d1 + d2 - d3,
@@ -129,12 +129,11 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
         centroid + d1 + d2 + d3,
     };
 
-    for (int i = 0; i < 8; ++i) {
+    for (int i = 0; i < 8; ++i)
         cuboid.corners[i] = PointFrom2DHomo(K * corners3D[i]);
-        cout << corners3D[i].t() << "\t->\t" << cuboid.corners[i] << endl;
-    }
+
     cuboid.valid = true;
-    cuboid.Rlc = Rcl.t();
+    cuboid.Rlc = Rlc;
 
     return cuboid;
 }
