@@ -78,7 +78,6 @@ protected:
 
     // Info of the keyframe to be drawn.
     cv::Mat mKeyframeIm;
-    std::vector<std::shared_ptr<Landmark>> mpLandmarks;
 };
 
 } //namespace ORB_SLAM

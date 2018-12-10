@@ -26,14 +26,22 @@
 namespace ORB_SLAM2 {
 
 struct LandmarkDimension {
-    float height{};   // Corresponding to vanishing point 3.
     float edge13{};   // Corresponding to vanishing point 1.
     float edge12{};   // Corresponding to vanishing point 2.
+    float edge18{};   // Corresponding to vanishing point 3.
 
-    LandmarkDimension() { }
-    LandmarkDimension(float height_, float edge13_, float edge12_)
-            :height(height_), edge13(edge13_), edge12(edge12_) { }
+    inline LandmarkDimension() = default;
+    LandmarkDimension(float edge13_, float edge12_, float edge18_)
+            :edge13(edge13_), edge12(edge12_), edge18(edge18_) { }
+
+    friend std::ostream& operator<<(std::ostream& out, const LandmarkDimension& dim);
 };
+
+inline std::ostream& operator<<(std::ostream& out, const LandmarkDimension& dim)
+{
+    out << '[' << dim.edge18 << 'x' << dim.edge12 << 'x' << dim.edge13 << ']';
+    return out;
+}
 
 class Landmark {
 public:
@@ -70,6 +78,14 @@ private:
 
     std::mutex mMutexPose;
 };
+
+inline cv::Mat TFromRt(const cv::Mat& R, const cv::Mat& t)
+{
+    cv::Mat T = cv::Mat::eye(4, 4, R.type());
+    R.copyTo(T.rowRange(0, 3).colRange(0, 3));
+    t.copyTo(T.col(3).rowRange(0, 3));
+    return T;
+}
 
 }
 

@@ -21,6 +21,7 @@
 #include "FrameDrawer.h"
 #include "Tracking.h"
 #include "ObjectDetector.h"
+#include "CubeSLAM.h"
 
 #include <opencv2/core/core.hpp>
 #include <opencv2/highgui/highgui.hpp>
@@ -127,7 +128,6 @@ Mat FrameDrawer::DrawFrame()
 Mat FrameDrawer::DrawKeyframe()
 {
     unique_lock<mutex> lock(mMutex);
-    // TODO: Visualize detected landmarks.
     return mKeyframeIm;
 }
 
@@ -205,7 +205,12 @@ void FrameDrawer::UpdateKeyframe(KeyFrame* keyFrame, const vector<Object>& objec
         ObjectDetector::DrawPred(mKeyframeIm, obj.bbox, obj.classIdx, obj.conf);
     }
 
-    mpLandmarks = keyFrame->GetLandmarks();
+    auto pLandmarks = keyFrame->GetLandmarks();
+    // Visualize detected landmarks.
+    for (const auto& pLandmark : pLandmarks) {
+        auto cuboid = pLandmark->Project(keyFrame->GetPose(), keyFrame->mK);
+        cuboid.Draw(mKeyframeIm, keyFrame->mK);
+    }
 }
 
 } //namespace ORB_SLAM

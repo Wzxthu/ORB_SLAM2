@@ -93,7 +93,7 @@ ObjectDetector::ObjectDetector(
     }
 }
 
-void ObjectDetector::DrawPred(Mat& frame, const Object& obj)
+void ObjectDetector::Draw(Mat& frame, const Object& obj)
 {
     DrawPred(frame, obj.bbox, obj.classIdx, obj.conf);
 }

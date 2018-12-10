@@ -69,13 +69,14 @@ void Landmark::SetPose(const Mat& Tlw_)
     mCuboid.pose = g2o::SE3Quat(homogeneous_matrix.block(0,0,3,3), homogeneous_matrix.col(3).head(3));
 }
 
-void Landmark::SetPose(const Mat& Rlw_, const Mat& tlw_)
+void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 {
-    Mat Tlw_ = Mat::zeros(4, 4, CV_32F);
-    Tlw_.at<float>(3, 3) = 1;
-    Tlw_.colRange(0, 3).rowRange(0, 3) = Rlw_;
-    Tlw_.col(3).rowRange(0, 3) = tlw_;
-    SetPose(Tlw_);
+    unique_lock<mutex> lock(mMutexPose);
+    Mat Rwl = Rlw.t();
+    Lw = -Rwl * tlw;
+
+    Tlw = TFromRt(Rlw, tlw);
+    Twl = TFromRt(Rwl, Lw);
 }
 
 void Landmark::SetPoseAndDimension(const g2o::cuboid Cuboid_)
