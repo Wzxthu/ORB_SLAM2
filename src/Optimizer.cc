@@ -631,14 +631,12 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
                         e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(pLandmark->cube_vertex));
                         e->setMeasurement(pKFi->landmarkMeas[pLandmark->landmarkID]);
-                        e->setId(pKFi->mnId);
                         Eigen::Vector9d inv_sigma;inv_sigma<<1,1,1,1,1,1,1,1,1;
                         inv_sigma = inv_sigma*2.0*pLandmark->meas_quality;
                         Eigen::Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
                         e->setInformation(info);
                         optimizer.addEdge(e);
                     }
-
                 }
                 else // Stereo observation
                 {
