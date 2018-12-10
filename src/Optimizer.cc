@@ -514,7 +514,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
         auto pInitCuboidGlobalPose = pLandmark->GetCuboid();
         vCube = new g2o::VertexCuboid();
         vCube->setEstimate(*pInitCuboidGlobalPose);
-        vCube->setId(offset + 1 + pLandmark->mnLandmarkId);
+        vCube->setId(maxKFid + 1 + pLandmark->mnLandmarkId);
         vCube->setFixed(false);
         optimizer.addVertex(vCube);
     }
