@@ -109,9 +109,9 @@ int main()
                 continue;
             {
                 Vec3f theta = EulerAnglesFromRotation(proposal.Rlc);
-                cout << "Roll=" << theta[0] * 180 / M_PI
-                     << " Yaw=" << theta[1] * 180 / M_PI
-                     << " Pitch=" << theta[2] * 180 / M_PI << endl;
+                cout << "Roll=" << theta[0] * 180 / M_PI_F
+                     << " Yaw=" << theta[1] * 180 / M_PI_F
+                     << " Pitch=" << theta[2] * 180 / M_PI_F << endl;
 
                 // Draw cuboid proposal
                 proposal.Draw(canvas, K);
@@ -154,8 +154,8 @@ void RunCuboidProposalGenerationTest(const Mat& img, const Rect& bbox, const Mat
 {
     cout << "Bounding box: " << bbox << endl;
 //    float roll = -M_PI - 6 * M_PI / 180, pitch = -16 * M_PI / 180, yaw = -M_PI+2 * M_PI / 180;
-    float roll = -M_PI, pitch = 0, yaw = -M_PI;
-    cout << "Roll=" << roll * 180 / M_PI << " Pitch=" << pitch * 180 / M_PI << " Yaw=" << yaw * 180 / M_PI << endl;
+    float roll = -M_PI_F, pitch = 0, yaw = -M_PI_F;
+    cout << "Roll=" << roll * 180 / M_PI_F << " Pitch=" << pitch * 180 / M_PI_F << " Yaw=" << yaw * 180 / M_PI_F << endl;
     // Recover rotation of the landmark.
     Mat Rlc = EulerAnglesToRotationMatrix(Vec3f(roll, yaw, pitch));
     Mat invRlc = Rlc.t();
