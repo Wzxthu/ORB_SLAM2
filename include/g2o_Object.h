@@ -120,7 +120,7 @@ public:
     inline Cuboid transformFrom(const SE3Quat& Twc) const
     {
         Cuboid res;
-        res.mPose = this->mPose.inverse() * Twc;
+        res.mPose = Twc * this->mPose;
         res.mScale = this->mScale;
         return res;
     }
