@@ -52,7 +52,7 @@ inline std::ostream& operator<<(std::ostream& out, const Dimension3D& dim)
 struct Cuboid2D {
     cv::Mat Rlc;
     cv::Point2f corners[8];
-    bool isCornerVisible[8]{true, true, true, true, true, true, true, true};
+    bool isCornerVisible[8]{};
     bool valid = false;
 
     friend std::ostream& operator<<(std::ostream& out, const Cuboid2D& cuboid);

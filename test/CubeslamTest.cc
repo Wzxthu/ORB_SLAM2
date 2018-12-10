@@ -38,7 +38,7 @@ int main()
             "data/cubeslam_test_example_5_info.txt",
     };
 
-    const float alignErrWeight = 8, shapeErrWeight = 1, shapeErrThresh = 4.f;
+    const float alignErrWeight = 6, shapeErrWeight = 1, shapeErrThresh = 4.f;
 
     auto objectDetector = new ObjectDetector("Thirdparty/darknet/cfg/yolov3.cfg", "model/yolov3.weights",
                                              .45, .6, 224 * 224);
@@ -117,7 +117,7 @@ int main()
                      << " Pitch=" << theta[2] * 180 / M_PI_F << endl;
 
                 // Draw cuboid proposal
-                proposal.Draw(canvas, K);
+                proposal.Draw(canvas, K, Scalar(128, 128, 128));
             }
 
             Landmark landmark;
@@ -133,7 +133,7 @@ int main()
             cout << dimension << endl;
 
             auto projCuboid = landmark.Project(Mat::eye(4, 4, CV_32F), K);
-            projCuboid.Draw(canvas, K, Scalar(128, 128, 128));
+            projCuboid.Draw(canvas, K);
 
             cout << proposal << endl;
             cout << projCuboid << endl << endl;

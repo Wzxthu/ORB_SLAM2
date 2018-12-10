@@ -535,7 +535,10 @@ void LocalMapping::SearchInNeighbors()
             // See if this landmark is visible in the current keyframe.
             auto Lc_z = Rcw_z.dot(pLandmark->GetCentroid()) + tcw_z;
             if (Lc_z > 0) {
-                mpCurrentKeyFrame->AddLandmark(pLandmark);
+                auto projCentroid = pLandmark->GetProjectedCentroid(mpCurrentKeyFrame->GetPose(),
+                                                                    mpCurrentKeyFrame->mK);
+                if (mpCurrentKeyFrame->IsInImage(projCentroid.x, projCentroid.y))
+                    mpCurrentKeyFrame->AddLandmark(pLandmark);
             }
         }
     }

@@ -32,34 +32,34 @@ inline float ChamferDist(const LineSegment& hypothesis,
 static inline float
 DistanceError(const Cuboid2D& proposal, const Rect& bbox, const vector<vector<float>>& distMap)
 {
-    const int verticalW = 4;
-    const int horizontalW = 1;
+    const float verticalW = 4;
+    const float horizontalW = 1;
     float distErr = 0;
     float weight_sum = 0;
-    distErr += horizontalW * powf(ChamferDist(make_pair(proposal.corners[0], proposal.corners[1]), bbox, distMap), 2);
-    distErr += horizontalW * powf(ChamferDist(make_pair(proposal.corners[0], proposal.corners[2]), bbox, distMap), 2);
-    distErr += horizontalW * powf(ChamferDist(make_pair(proposal.corners[1], proposal.corners[3]), bbox, distMap), 2);
-    distErr += horizontalW * powf(ChamferDist(make_pair(proposal.corners[2], proposal.corners[3]), bbox, distMap), 2);
-    distErr += verticalW * powf(ChamferDist(make_pair(proposal.corners[3], proposal.corners[4]), bbox, distMap), 2);
+    distErr += horizontalW * ChamferDist(make_pair(proposal.corners[0], proposal.corners[1]), bbox, distMap);
+    distErr += horizontalW * ChamferDist(make_pair(proposal.corners[0], proposal.corners[2]), bbox, distMap);
+    distErr += horizontalW * ChamferDist(make_pair(proposal.corners[1], proposal.corners[3]), bbox, distMap);
+    distErr += horizontalW * ChamferDist(make_pair(proposal.corners[2], proposal.corners[3]), bbox, distMap);
+    distErr += verticalW * ChamferDist(make_pair(proposal.corners[3], proposal.corners[4]), bbox, distMap);
     weight_sum += horizontalW * 4 + verticalW;
 
-    float distErr6 = verticalW * powf(ChamferDist(make_pair(proposal.corners[1], proposal.corners[6]), bbox, distMap), 2) +
-                     horizontalW * powf(ChamferDist(make_pair(proposal.corners[4], proposal.corners[6]), bbox, distMap), 2);
+    float distErr6 = verticalW * ChamferDist(make_pair(proposal.corners[1], proposal.corners[6]), bbox, distMap) +
+                     horizontalW * ChamferDist(make_pair(proposal.corners[4], proposal.corners[6]), bbox, distMap);
     if (proposal.isCornerVisible[6] || distErr6 * weight_sum < distErr * (horizontalW + verticalW)) {
         distErr += distErr6;
         weight_sum += horizontalW + verticalW;
     }
 
-    float distErr5 = verticalW * powf(ChamferDist(make_pair(proposal.corners[2], proposal.corners[5]), bbox, distMap), 2) +
-                     horizontalW * powf(ChamferDist(make_pair(proposal.corners[4], proposal.corners[5]), bbox, distMap), 2);
+    float distErr5 = verticalW * ChamferDist(make_pair(proposal.corners[2], proposal.corners[5]), bbox, distMap) +
+                     horizontalW * ChamferDist(make_pair(proposal.corners[4], proposal.corners[5]), bbox, distMap);
     if (proposal.isCornerVisible[5] || distErr6 * weight_sum < distErr * (horizontalW + verticalW)) {
         distErr += distErr5;
         weight_sum += horizontalW + verticalW;
     }
 
-    float distErr7 = verticalW * powf(ChamferDist(make_pair(proposal.corners[0], proposal.corners[7]), bbox, distMap), 2) +
-                     horizontalW * powf(ChamferDist(make_pair(proposal.corners[5], proposal.corners[7]), bbox, distMap), 2) +
-                     horizontalW * powf(ChamferDist(make_pair(proposal.corners[6], proposal.corners[7]), bbox, distMap), 2);
+    float distErr7 = verticalW * ChamferDist(make_pair(proposal.corners[0], proposal.corners[7]), bbox, distMap) +
+                     horizontalW * ChamferDist(make_pair(proposal.corners[5], proposal.corners[7]), bbox, distMap) +
+                     horizontalW * ChamferDist(make_pair(proposal.corners[6], proposal.corners[7]), bbox, distMap);
     if (distErr7 * weight_sum < distErr * (horizontalW + horizontalW + verticalW)) {
         distErr += distErr7;
         weight_sum += horizontalW + horizontalW + verticalW;
@@ -143,16 +143,16 @@ Cuboid2D FindBestProposal(const Rect& bbox, const vector<LineSegment*>& lineSegs
     vector<float> distErrs, alignErrs, shapeErrs;
     vector<Cuboid2D> candidates;
     {
-        const auto topXStep = max(2, bbox.width / 20);
+        const auto topXStep = max(2, bbox.width / 8);
         const auto topXStart = bbox.x + (topXStep >> 1);
         const auto topXEnd = bbox.x + bbox.width - (topXStep >> 1);
-        const auto rollStep = min(rollRange / 10, 3 * M_PI_F / 180);
+        const auto rollStep = min(rollRange / 4, 3 * M_PI_F / 180);
         const auto rollStart = refRoll - rollRange;
         const auto rollEnd = refRoll + rollRange;
-        const auto pitchStep = min(pitchRange / 10, 3 * M_PI_F / 180);
+        const auto pitchStep = min(pitchRange / 4, 3 * M_PI_F / 180);
         const auto pitchStart = refPitch - pitchRange;
         const auto pitchEnd = refPitch + pitchRange;
-        const auto yawStep = 3 * M_PI_F / 180;
+        const auto yawStep = 6 * M_PI_F / 180;
         const auto yawStart = -M_PI_F - 90 * M_PI_F / 180;
         const auto yawEnd = -M_PI_F + 90 * M_PI_F / 180;
         // Sample the landmark pitch in 90 degrees around the camera pitch.
@@ -301,6 +301,10 @@ Cuboid2D GenerateCuboidProposal(const Rect& bbox, int topX,
             proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
             if (!Inside(proposal.corners[7], bbox))
                 return proposal;
+            proposal.isCornerVisible[0] = true;
+            proposal.isCornerVisible[1] = true;
+            proposal.isCornerVisible[2] = true;
+            proposal.isCornerVisible[3] = true;
             proposal.isCornerVisible[4] = true;
             proposal.isCornerVisible[5] = true;
             proposal.isCornerVisible[6] = true;
@@ -346,6 +350,10 @@ Cuboid2D GenerateCuboidProposal(const Rect& bbox, int topX,
             proposal.corners[7] = LineIntersection(vp1, proposal.corners[6], vp2, proposal.corners[5]);
             if (!Inside(proposal.corners[7], bbox))
                 return proposal;
+            proposal.isCornerVisible[0] = true;
+            proposal.isCornerVisible[1] = true;
+            proposal.isCornerVisible[2] = true;
+            proposal.isCornerVisible[3] = true;
             proposal.isCornerVisible[4] = true;
             proposal.isCornerVisible[7] = false;
         }
