@@ -89,7 +89,7 @@ src/Sim3Solver.cc
 src/Initializer.cc
 src/Viewer.cc
 src/ObjectDetector.cc
-src/Landmark.cc include/LineSegmentDetector.h src/LineSegmentDetector.cc src/CubeSLAM.cc src/matrix_utils.cc)
+src/Landmark.cc include/LineSegmentDetector.h src/LineSegmentDetector.cc src/CubeSLAM.cc src/Cuboid.cc src/matrix_utils.cc)
 
 link_directories(${PROJECT_SOURCE_DIR}/Thirdparty/g2o/lib)
 
