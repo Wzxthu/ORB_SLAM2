@@ -202,8 +202,6 @@ public:
     // Gray image for performing line segment detection.
     cv::Mat mImGray;
 
-    g2o::VertexSE3Expmap* pose_vertex;
-
     g2o::SE3Quat cam_pose_Tcw;	     // optimized pose  world to cam
     g2o::SE3Quat cam_pose_Twc;	     // optimized pose  cam to world
     std::unordered_map<int, g2o::cuboid> landmarkMeas;
