@@ -402,20 +402,4 @@ vector<vector<float>> PrecomputeChamferDistMap(const Rect& bbox,
     return distMap;
 }
 
-LandmarkDimension DimensionFromProposal(const Cuboid2D& proposal, const Mat& camCoordCentroid)
-{
-    auto center1368 = LineIntersection(proposal.corners[0], proposal.corners[5],
-                                       proposal.corners[2], proposal.corners[7]);
-    auto center1278 = LineIntersection(proposal.corners[2], proposal.corners[4],
-                                       proposal.corners[3], proposal.corners[5]);
-    auto center5678 = LineIntersection(proposal.corners[4], proposal.corners[7],
-                                       proposal.corners[5], proposal.corners[6]);
-
-    return {
-            2 * DistanceToRay(camCoordCentroid, proposal.Rlc.col(0), PointToHomo(center1368)),
-            2 * DistanceToRay(camCoordCentroid, proposal.Rlc.col(1), PointToHomo(center1278)),
-            2 * DistanceToRay(camCoordCentroid, proposal.Rlc.col(2), PointToHomo(center5678)),
-    };
-}
-
 }
