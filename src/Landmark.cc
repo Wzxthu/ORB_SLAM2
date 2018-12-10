@@ -31,18 +31,16 @@ namespace ORB_SLAM2 {
 
 int Landmark::landmarkCnt = 0;
 
-Landmark::Landmark() = default;
-
-Landmark::Landmark(Landmark& other)
-{
-    SetPose(other.GetPose());
-    SetDimension(other.GetDimension());
-
-    bboxCenter = other.bboxCenter;
-    mQuality = other.mQuality;
-    mClassIdx = other.mClassIdx;
-    mnLandmarkId = other.mnLandmarkId;
-}
+//Landmark::Landmark(Landmark& other)
+//{
+//    SetPose(other.GetPose());
+//    SetDimension(other.GetDimension());
+//
+//    bboxCenter = other.bboxCenter;
+//    mQuality = other.mQuality;
+//    mClassIdx = other.mClassIdx;
+//    mnLandmarkId = other.mnLandmarkId;
+//}
 
 Dimension3D Landmark::GetDimension()
 {
