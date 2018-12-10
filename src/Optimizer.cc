@@ -523,7 +523,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
         vSE3->setId(pKFi->mnId);
         vSE3->setFixed(pKFi->mnId==0);
-        pKFi->pose_vertex = vSE3;
         optimizer.addVertex(vSE3);
         if(pKFi->mnId>maxKFid)
             maxKFid=pKFi->mnId;
@@ -536,7 +535,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
         g2o::cuboid init_cuboid_global_pose = pLandmark->GetCuboid();
         vCube = new g2o::VertexCuboid();
         vCube->setEstimate(init_cuboid_global_pose);
-        vCube->setId(pLandmark->landmarkID);
         vCube->setFixed(false);
         pLandmark->cube_vertex = vCube;
         optimizer.addVertex(vCube);
@@ -630,8 +628,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
                     auto landmarks = pKFi->GetLandmarks();
                     for (const auto& pLandmark : landmarks) {
                         g2o::EdgeSE3Cuboid* e = new g2o::EdgeSE3Cuboid();
-                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>( pKFi->pose_vertex ));
-                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>( pLandmark->cube_vertex ));
+                        e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
+                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(pLandmark->cube_vertex));
                         e->setMeasurement(pKFi->landmarkMeas[pLandmark->landmarkID]);
                         e->setId(pKFi->mnId);
                         Eigen::Vector9d inv_sigma;inv_sigma<<1,1,1,1,1,1,1,1,1;
@@ -790,7 +788,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame *pKF, bool* pbStopFlag, Map* pMap
 
     //Landmarks
     for (const auto& pLandmark : lLocalLandmarks) {
-        g2o::VertexCuboid* vCube = static_cast<g2o::VertexCuboid*>(optimizer.vertex(pLandmark->landmarkID));
+        g2o::VertexCuboid* vCube = static_cast<g2o::VertexCuboid*>(pLandmark->cube_vertex);
         const g2o::cuboid &cuboid = vCube->estimate();
         pLandmark->SetPoseAndDimension(cuboid);
     }
