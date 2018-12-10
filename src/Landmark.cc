@@ -34,6 +34,7 @@ Landmark::Landmark(Landmark& other)
 {
     SetPose(other.GetPose());
     SetDimension(other.GetDimension());
+    mCuboid = g2o::cuboid();
 }
 
 void Landmark::SetDimension(const LandmarkDimension& dimension)
