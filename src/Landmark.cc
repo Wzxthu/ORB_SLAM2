@@ -206,7 +206,6 @@ Landmark::Landmark(const Cuboid2D& proposal, float proposalQuality, const Object
     auto dimension = proposal.GetDimension3D(centroid3D, invK);
     SetDimensionNoLock(dimension);
 
-    bboxCenter[pKF->mnFrameId] = proposal.GetCentroid();
 }
 
 const g2o::Cuboid* Landmark::GetCuboid()

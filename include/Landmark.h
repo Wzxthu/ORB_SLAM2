@@ -27,6 +27,7 @@
 #include "ObjectDetector.h"
 
 #include <g2o_Object.h>
+#include <vector>
 
 namespace ORB_SLAM2 {
 
@@ -60,7 +61,7 @@ public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
 public:
-    std::unordered_map<int, cv::Point2f> bboxCenter;
+    std::unordered_map<int, std::vector<float>> bboxCenter;
     float mQuality;
     int mClassIdx;
     int mnLandmarkId;

@@ -31,6 +31,7 @@
 #include <g2o_Object.h>
 
 #include <unordered_set>
+#include <opencv2/core/eigen.hpp>
 
 using namespace cv;
 using namespace std;
@@ -107,8 +108,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
                 sLandmarkIds.insert(pLandmark->mnLandmarkId);
                 lLocalLandmarks.push_back(pLandmark);
             }
-            pKFi->landmarkMeasurements[pLandmark->mnLandmarkId] =
-                    pLandmark->GetCuboid()->transformTo(pKFi->cam_pose_Twc);
         }
         auto* vSE3 = new g2o::VertexSE3Expmap();
         vSE3->setEstimate(Converter::toSE3Quat(pKFi->GetPose()));
@@ -170,14 +169,19 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
         // add g2o camera-object measurement edges, if there is
         auto landmarks = pKFi->GetLandmarks();
         for (const auto& pLandmark : landmarks) {
-            auto* edgeSE3Cuboid = new g2o::EdgeSE3Cuboid();
+            if (pLandmark->bboxCenter.find(pKFi->mnId) == pLandmark->bboxCenter.end()) {
+                continue;
+            }
+            auto* edgeSE3Cuboid = new g2o::EdgeSE3CuboidProj();
+            cv::cv2eigen(pKFi->mK, edgeSE3Cuboid->Kalib);
             edgeSE3Cuboid->setVertex(0, optimizer.vertex(pKFi->mnId));
             edgeSE3Cuboid->setVertex(1, optimizer.vertex(maxKFId + 1 + pLandmark->mnLandmarkId));
-            edgeSE3Cuboid->setMeasurement(pKFi->landmarkMeasurements[pLandmark->mnLandmarkId]);
-            Eigen::Vector9d inv_sigma;
-            inv_sigma << 1, 1, 1, 1, 1, 1, 1, 1, 1;
+            auto vecCenter = pLandmark->bboxCenter[pKFi->mnId];
+            edgeSE3Cuboid->setMeasurement(Eigen::Vector4d(vecCenter[0], vecCenter[1], vecCenter[2], vecCenter[3]));
+            Eigen::Vector4d inv_sigma;
+            inv_sigma << 1, 1, 1, 1;
             inv_sigma = inv_sigma * 2.0 * pLandmark->mQuality;
-            Eigen::Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
+            Eigen::Matrix4d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
             edgeSE3Cuboid->setInformation(info);
             optimizer.addEdge(edgeSE3Cuboid);
         }
@@ -186,14 +190,19 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
         // add g2o camera-object measurement edges, if there is
         auto landmarks = pKFi->GetLandmarks();
         for (const auto& pLandmark : landmarks) {
-            auto* edgeSE3Cuboid = new g2o::EdgeSE3Cuboid();
+            if (pLandmark->bboxCenter.find(pKFi->mnId) == pLandmark->bboxCenter.end()) {
+                continue;
+            }
+            auto* edgeSE3Cuboid = new g2o::EdgeSE3CuboidProj();
+            cv::cv2eigen(pKFi->mK, edgeSE3Cuboid->Kalib);
             edgeSE3Cuboid->setVertex(0, optimizer.vertex(pKFi->mnId));
             edgeSE3Cuboid->setVertex(1, optimizer.vertex(maxKFId + 1 + pLandmark->mnLandmarkId));
-            edgeSE3Cuboid->setMeasurement(pKFi->landmarkMeasurements[pLandmark->mnLandmarkId]);
-            Eigen::Vector9d inv_sigma;
-            inv_sigma << 1, 1, 1, 1, 1, 1, 1, 1, 1;
+            auto vecCenter = pLandmark->bboxCenter[pKFi->mnId];
+            edgeSE3Cuboid->setMeasurement(Eigen::Vector4d(vecCenter[0], vecCenter[1], vecCenter[2], vecCenter[3]));
+            Eigen::Vector4d inv_sigma;
+            inv_sigma << 1, 1, 1, 1;
             inv_sigma = inv_sigma * 2.0 * pLandmark->mQuality;
-            Eigen::Matrix9d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
+            Eigen::Matrix4d info = inv_sigma.cwiseProduct(inv_sigma).asDiagonal();
             edgeSE3Cuboid->setInformation(info);
             optimizer.addEdge(edgeSE3Cuboid);
         }

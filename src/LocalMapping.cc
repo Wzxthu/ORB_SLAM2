@@ -815,8 +815,10 @@ void LocalMapping::FindLandmarks()
             const auto& center = projCenters[cIdx];
             if (max(center.x - bbox.x, center.y - bbox.y) <= min(bbox.width, bbox.height) >> 2) {
                 seen = true;
-                landmarks[cIdx]->bboxCenter[mpCurrentKeyFrame->mnFrameId] =
-                        cv::Point2f(bbox.x + bbox.width * .5f, bbox.y + bbox.height * .5f);
+                landmarks[cIdx]->bboxCenter[mpCurrentKeyFrame->mnId] = vector<float>{bbox.x + bbox.width * .5f,
+                                                                                     bbox.y + bbox.height * .5f,
+                                                                                     bbox.width * 1.0f,
+                                                                                     bbox.height * 1.0f};
                 break;
             }
         }
