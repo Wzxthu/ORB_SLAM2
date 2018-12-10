@@ -64,7 +64,7 @@ void Landmark::SetPose(const Mat& Tlw_)
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 
-    mCuboid.pose = Converter::toSE3Quat(Twl);
+    mCuboid.pose = ORB_SLAM2::Converter::toSE3Quat(Twl);
 }
 
 void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
@@ -79,7 +79,7 @@ void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 
 void Landmark::SetPoseAndDimension(const g2o::cuboid Cuboid_)
 {
-    Twl = Converter::toCvMat(Cuboid_.pose);
+    Twl = ORB_SLAM2::Converter::toCvMat(Cuboid_.pose);
     Eigen::Vector3d scale = Cuboid_.scale;
     SetDimension(LandmarkDimension(scale[1], scale[2], scale[0]));
 }
