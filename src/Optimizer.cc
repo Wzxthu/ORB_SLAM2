@@ -481,10 +481,8 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
     unsigned long maxKFid = 0;
 
     // Set Local KeyFrame vertices
-    int offset = 0;
     std::unordered_set<std::shared_ptr<Landmark>> lLocalLandmarks;
     for (auto pKFi : lLocalKeyFrames) {
-        offset = offset > pKFi->mnId ? offset : pKFi->mnId;
         auto landmarks = pKFi->GetLandmarks();
         for (const auto& pLandmark : landmarks) {
             lLocalLandmarks.insert(pLandmark);
@@ -499,18 +497,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
             maxKFid = pKFi->mnId;
     }
 
-    for (const auto& pLandmark : lLocalLandmarks) {
-        g2o::VertexCuboid* vCube;
-        // set up g2o cube vertex. only one in this dataset
-        pLandmark->mQuality = 0.1;
-        auto pInitCuboidGlobalPose = pLandmark->GetCuboid();
-        vCube = new g2o::VertexCuboid();
-        vCube->setEstimate(*pInitCuboidGlobalPose);
-        vCube->setId(offset + 1 + pLandmark->mnLandmarkId);
-        vCube->setFixed(false);
-        optimizer.addVertex(vCube);
-    }
-
     // Set Fixed KeyFrame vertices
     for (auto pKFi : lFixedCameras) {
         g2o::VertexSE3Expmap* vSE3 = new g2o::VertexSE3Expmap();
@@ -520,6 +506,17 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
         optimizer.addVertex(vSE3);
         if (pKFi->mnId > maxKFid)
             maxKFid = pKFi->mnId;
+    }
+
+    for (const auto& pLandmark : lLocalLandmarks) {
+        g2o::VertexCuboid* vCube;
+        pLandmark->mQuality = 0.1;
+        auto pInitCuboidGlobalPose = pLandmark->GetCuboid();
+        vCube = new g2o::VertexCuboid();
+        vCube->setEstimate(*pInitCuboidGlobalPose);
+        vCube->setId(offset + 1 + pLandmark->mnLandmarkId);
+        vCube->setFixed(false);
+        optimizer.addVertex(vCube);
     }
 
     // Set MapPoint vertices
@@ -598,7 +595,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
                     for (const auto& pLandmark : landmarks) {
                         g2o::EdgeSE3Cuboid* e = new g2o::EdgeSE3Cuboid();
                         e->setVertex(0, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(pKFi->mnId)));
-                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(offset + 1 + pLandmark->mnLandmarkId)));
+                        e->setVertex(1, dynamic_cast<g2o::OptimizableGraph::Vertex*>(optimizer.vertex(maxKFid + 1 + pLandmark->mnLandmarkId)));
                         e->setMeasurement(pKFi->landmarkMeasurements[pLandmark->mnLandmarkId]);
                         Eigen::Vector9d inv_sigma;
                         inv_sigma << 1, 1, 1, 1, 1, 1, 1, 1, 1;
@@ -746,7 +743,7 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
 
     //Landmarks
     for (const auto& pLandmark : lLocalLandmarks) {
-        g2o::VertexCuboid* vCube = static_cast<g2o::VertexCuboid*>(optimizer.vertex(offset + 1 + pLandmark->mnLandmarkId));
+        g2o::VertexCuboid* vCube = static_cast<g2o::VertexCuboid*>(optimizer.vertex(maxKFid + 1 + pLandmark->mnLandmarkId));
         const g2o::Cuboid& cuboid = vCube->estimate();
         pLandmark->SetPoseAndDimension(cuboid);
     }
