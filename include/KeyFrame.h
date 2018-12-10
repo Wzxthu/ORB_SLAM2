@@ -30,6 +30,7 @@
 #include "Frame.h"
 #include "KeyFrameDatabase.h"
 #include "Landmark.h"
+#include "g2o_Object.h"
 
 #include <mutex>
 
@@ -200,6 +201,12 @@ public:
     cv::Mat mImColor;
     // Gray image for performing line segment detection.
     cv::Mat mImGray;
+
+    g2o::VertexSE3Expmap* pose_vertex;
+
+    g2o::SE3Quat cam_pose_Tcw;	     // optimized pose  world to cam
+    g2o::SE3Quat cam_pose_Twc;	     // optimized pose  cam to world
+    std::unordered_map<int, g2o::cuboid> landmarkMeas;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:

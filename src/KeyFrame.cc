@@ -82,6 +82,10 @@ void KeyFrame::SetPose(const cv::Mat& Tcw_)
     Ow.copyTo(Twc.rowRange(0, 3).col(3));
     cv::Mat center = (cv::Mat_<float>(4, 1) << mHalfBaseline, 0, 0, 1);
     Cw = Twc * center;
+
+    cam_pose_Tcw = ORB_SLAM2::Converter::toSE3Quat(Tcw);
+    cam_pose_Twc = ORB_SLAM2::Converter::toSE3Quat(Twc);
+
 }
 
 cv::Mat KeyFrame::GetPose()

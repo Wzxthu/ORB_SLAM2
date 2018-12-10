@@ -25,6 +25,8 @@
 #include "KeyFrame.h"
 #include "MapPoint.h"
 
+#include <g2o_Object.h>
+
 namespace ORB_SLAM2 {
 
 class MapPoint;
@@ -33,6 +35,8 @@ class KeyFrame;
 class Landmark {
 public:
     std::unordered_map<int, cv::Point2f> bboxCenter;
+    g2o::VertexCuboid* cube_vertex;
+    float meas_quality;
 public:
     Landmark();
     Landmark(Landmark& other);
@@ -42,6 +46,7 @@ public:
     void SetPose(const cv::Mat& Tlw_);
     void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
     Dimension3D GetDimension();
+    void SetPoseAndDimension(const g2o::cuboid& Cuboid_);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetRotation();
@@ -50,6 +55,7 @@ public:
     cv::Mat GetCentroid();
     cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw, const cv::Mat& K);
 
+    g2o::cuboid GetCuboid();
     Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
 public:
     int mClassIdx;
@@ -62,6 +68,7 @@ private:
     cv::Mat Lw;
     // Landmark dimension.
     Dimension3D mDimension;
+    g2o::cuboid mCuboid;  //cube_value
 
     std::mutex mMutexPose;
 
