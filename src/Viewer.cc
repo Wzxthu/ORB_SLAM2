@@ -72,6 +72,7 @@ void Viewer::Run()
     pangolin::Var<bool> menuShowPoints("menu.Show Points", true, true);
     pangolin::Var<bool> menuShowKeyFrames("menu.Show KeyFrames", true, true);
     pangolin::Var<bool> menuShowGraph("menu.Show Graph", true, true);
+    pangolin::Var<bool> menuShowLandmarks("menu.Show Landmarks", true, true);
     pangolin::Var<bool> menuLocalizationMode("menu.Localization Mode", false, true);
     pangolin::Var<bool> menuReset("menu.Reset", false, false);
 
@@ -129,6 +130,8 @@ void Viewer::Run()
             mpMapDrawer->DrawKeyFrames(menuShowKeyFrames, menuShowGraph);
         if (menuShowPoints)
             mpMapDrawer->DrawMapPoints();
+        if (menuShowLandmarks)
+            mpMapDrawer->DrawLandmarks();
 
         pangolin::FinishFrame();
 

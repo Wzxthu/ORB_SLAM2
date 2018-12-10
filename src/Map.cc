@@ -44,6 +44,12 @@ void Map::AddMapPoint(MapPoint *pMP)
     mspMapPoints.insert(pMP);
 }
 
+void Map::AddLandmark(const std::shared_ptr<Landmark>& pLandmark)
+{
+    unique_lock<mutex> lock(mMutexMap);
+    mspLandmarks.insert(pLandmark);
+}
+
 void Map::EraseMapPoint(MapPoint *pMP)
 {
     unique_lock<mutex> lock(mMutexMap);
@@ -92,6 +98,12 @@ vector<MapPoint*> Map::GetAllMapPoints()
     return vector<MapPoint*>(mspMapPoints.begin(),mspMapPoints.end());
 }
 
+vector<shared_ptr<Landmark>> Map::GetAllLandmarks()
+{
+    unique_lock<mutex> lock(mMutexMap);
+    return vector<shared_ptr<Landmark>>(mspLandmarks.begin(),mspLandmarks.end());
+}
+
 long unsigned int Map::MapPointsInMap()
 {
     unique_lock<mutex> lock(mMutexMap);
@@ -118,11 +130,11 @@ long unsigned int Map::GetMaxKFid()
 
 void Map::clear()
 {
-    for(set<MapPoint*>::iterator sit=mspMapPoints.begin(), send=mspMapPoints.end(); sit!=send; sit++)
-        delete *sit;
+    for (auto mspMapPoint : mspMapPoints)
+        delete mspMapPoint;
 
-    for(set<KeyFrame*>::iterator sit=mspKeyFrames.begin(), send=mspKeyFrames.end(); sit!=send; sit++)
-        delete *sit;
+    for (auto mspKeyFrame : mspKeyFrames)
+        delete mspKeyFrame;
 
     mspMapPoints.clear();
     mspKeyFrames.clear();

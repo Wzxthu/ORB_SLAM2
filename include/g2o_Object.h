@@ -23,12 +23,6 @@ typedef Eigen::Matrix<double, 6, 6> Matrix6d;
 
 namespace g2o {
 
-inline Eigen::Vector6d SE3QuatToXYZPRYVector(g2o::SE3Quat se3)
-{
-    // TODO
-    return Eigen::Vector6d();
-}
-
 class cuboid {
 public:
     SE3Quat pose;  // 6 dof for object, object to world by default
@@ -146,7 +140,7 @@ public:
     inline Eigen::Vector9d toMinimalVector() const
     {
         Eigen::Vector9d v;
-        v.head<6>() = SE3QuatToXYZPRYVector(pose);
+        v.head<6>() = pose.toXYZPRYVector();
         v.tail<3>() = scale;
         return v;
     }
