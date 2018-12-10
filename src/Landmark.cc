@@ -31,17 +31,6 @@ namespace ORB_SLAM2 {
 
 int Landmark::landmarkCnt = 0;
 
-//Landmark::Landmark(Landmark& other)
-//{
-//    SetPose(other.GetPose());
-//    SetDimension(other.GetDimension());
-//
-//    bboxCenter = other.bboxCenter;
-//    mQuality = other.mQuality;
-//    mClassIdx = other.mClassIdx;
-//    mnLandmarkId = other.mnLandmarkId;
-//}
-
 Dimension3D Landmark::GetDimension()
 {
     unique_lock<mutex> lock(mMutexPose);
@@ -95,13 +84,19 @@ void Landmark::SetPoseNoLock(const Mat& Rlw, const Mat& tlw)
 
     Tlw = TFromRt(Rlw, tlw);
     Twl = TFromRt(Rwl, Lw);
+
+    mpCuboid->mPose = ORB_SLAM2::Converter::toSE3Quat(Twl);
 }
 
 void Landmark::SetPoseAndDimension(const g2o::Cuboid& cuboid)
 {
-    Twl = ORB_SLAM2::Converter::toCvMat(cuboid.mPose);
     Eigen::Vector3d scale = cuboid.mScale;
     SetDimension(Dimension3D(scale[1], scale[2], scale[0]));
+    Twl = ORB_SLAM2::Converter::toCvMat(cuboid.mPose);
+    Mat Rwl, twl;
+    Twl.rowRange(0, 3).colRange(0, 3).copyTo(Rwl);
+    Twl.rowRange(0, 3).col(3).copyTo(twl);
+    SetPose(Rwl.t(), -twl);
 }
 
 Point2f Landmark::GetProjectedCentroid(const Mat& Tcw, const Mat& K)
@@ -206,6 +201,7 @@ Landmark::Landmark(const Cuboid2D& proposal, float proposalQuality, const Object
     auto dimension = proposal.GetDimension3D(centroid3D, invK);
     SetDimensionNoLock(dimension);
 
+    cout << "Landmark " << mnLandmarkId << " created!" << endl;
 }
 
 const g2o::Cuboid* Landmark::GetCuboid()

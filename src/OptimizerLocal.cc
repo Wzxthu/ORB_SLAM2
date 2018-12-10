@@ -134,7 +134,6 @@ void Optimizer::LocalBundleAdjustment(KeyFrame* pKF, bool* pbStopFlag, Map* pMap
         auto* vCuboid = new g2o::VertexCuboid();
         vCuboid->setEstimate(*pInitCuboidGlobalPose);
         vCuboid->setId(maxKFId + 1 + pLandmark->mnLandmarkId);
-        cout << pLandmark->mnLandmarkId << endl;
         vCuboid->setFixed(false);
         optimizer.addVertex(vCuboid);
         if (pLandmark->mnLandmarkId > maxLandmarkId)
