@@ -29,12 +29,19 @@ using namespace cv;
 
 namespace ORB_SLAM2 {
 
+int Landmark::landmarkCnt = 0;
+
 Landmark::Landmark() = default;
 
 Landmark::Landmark(Landmark& other)
 {
     SetPose(other.GetPose());
     SetDimension(other.GetDimension());
+
+    bboxCenter = other.bboxCenter;
+    mQuality = other.mQuality;
+    mClassIdx = other.mClassIdx;
+    mnLandmarkId = other.mnLandmarkId;
 }
 
 Dimension3D Landmark::GetDimension()
@@ -166,7 +173,7 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
 }
 
 Landmark::Landmark(const Cuboid2D& proposal, const Object& object, KeyFrame* pKF, const cv::Mat& invK)
-        :mClassIdx(object.classIdx), mQuality(object.conf)
+        :mQuality(object.conf), mClassIdx(object.classIdx), mnLandmarkId(landmarkCnt++)
 {
     auto mapPoints = pKF->GetMapPointMatches();
 
