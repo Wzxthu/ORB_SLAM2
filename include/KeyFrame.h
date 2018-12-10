@@ -34,9 +34,7 @@
 
 #include <mutex>
 
-
-namespace ORB_SLAM2
-{
+namespace ORB_SLAM2 {
 
 class Map;
 class MapPoint;
@@ -44,14 +42,13 @@ class Frame;
 class KeyFrameDatabase;
 class Landmark;
 
-class KeyFrame
-{
+class KeyFrame {
 public:
 
-    KeyFrame(Frame &F, Map* pMap, KeyFrameDatabase* pKFDB, const cv::Mat &imColor, const cv::Mat &imGray);
+    KeyFrame(Frame& F, Map* pMap, KeyFrameDatabase* pKFDB, const cv::Mat& imColor, const cv::Mat& imGray);
 
     // Pose functions
-    void SetPose(const cv::Mat &Tcw);
+    void SetPose(const cv::Mat& Tcw);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetCameraCenter();
@@ -63,14 +60,14 @@ public:
     void ComputeBoW();
 
     // Covisibility graph functions
-    void AddConnection(KeyFrame* pKF, const int &weight);
+    void AddConnection(KeyFrame* pKF, const int& weight);
     void EraseConnection(KeyFrame* pKF);
     void UpdateConnections();
     void UpdateBestCovisibles();
-    std::set<KeyFrame *> GetConnectedKeyFrames();
-    std::vector<KeyFrame* > GetVectorCovisibleKeyFrames();
-    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int &N);
-    std::vector<KeyFrame*> GetCovisiblesByWeight(const int &w);
+    std::set<KeyFrame*> GetConnectedKeyFrames();
+    std::vector<KeyFrame*> GetVectorCovisibleKeyFrames();
+    std::vector<KeyFrame*> GetBestCovisibilityKeyFrames(const int& N);
+    std::vector<KeyFrame*> GetCovisiblesByWeight(const int& w);
     int GetWeight(KeyFrame* pKF);
 
     // Spanning tree functions
@@ -90,21 +87,21 @@ public:
     std::vector<std::shared_ptr<Landmark>> GetLandmarks();
 
     // MapPoint observation functions
-    void AddMapPoint(MapPoint* pMP, const size_t &idx);
-    void EraseMapPointMatch(const size_t &idx);
+    void AddMapPoint(MapPoint* pMP, const size_t& idx);
+    void EraseMapPointMatch(const size_t& idx);
     void EraseMapPointMatch(MapPoint* pMP);
-    void ReplaceMapPointMatch(const size_t &idx, MapPoint* pMP);
+    void ReplaceMapPointMatch(const size_t& idx, MapPoint* pMP);
     std::set<MapPoint*> GetMapPoints();
     std::vector<MapPoint*> GetMapPointMatches();
-    int TrackedMapPoints(const int &minObs);
-    MapPoint* GetMapPoint(const size_t &idx);
+    int TrackedMapPoints(const int& minObs);
+    MapPoint* GetMapPoint(const size_t& idx);
 
     // KeyPoint functions
-    std::vector<size_t> GetFeaturesInArea(const float &x, const float  &y, const float  &r) const;
+    std::vector<size_t> GetFeaturesInArea(const float& x, const float& y, const float& r) const;
     cv::Mat UnprojectStereo(int i);
 
     // Image
-    bool IsInImage(const float &x, const float &y) const;
+    bool IsInImage(const float& x, const float& y) const;
 
     // Enable/Disable bad flag changes
     void SetNotErase();
@@ -117,12 +114,14 @@ public:
     // Compute Scene Depth (q=2 median). Used in monocular.
     float ComputeSceneMedianDepth(int q);
 
-    static bool weightComp( int a, int b){
-        return a>b;
+    static bool weightComp(int a, int b)
+    {
+        return a > b;
     }
 
-    static bool lId(KeyFrame* pKF1, KeyFrame* pKF2){
-        return pKF1->mnId<pKF2->mnId;
+    static bool lId(KeyFrame* pKF1, KeyFrame* pKF2)
+    {
+        return pKF1->mnId < pKF2->mnId;
     }
 
 
@@ -202,9 +201,10 @@ public:
     // Gray image for performing line segment detection.
     cv::Mat mImGray;
 
-    g2o::SE3Quat cam_pose_Tcw;	     // optimized pose  world to cam
-    g2o::SE3Quat cam_pose_Twc;	     // optimized pose  cam to world
-    std::unordered_map<int, g2o::cuboid> landmarkMeas;
+    g2o::SE3Quat cam_pose_Tcw;         // optimized pose  world to cam
+    g2o::SE3Quat cam_pose_Twc;         // optimized pose  cam to world
+    std::map<int, g2o::Cuboid,
+             std::less<int>, Eigen::aligned_allocator<std::pair<const int, g2o::Cuboid>>> landmarkMeasurements;
 
     // The following variables need to be accessed trough a mutex to be thread safe.
 protected:
@@ -227,9 +227,9 @@ protected:
     ORBVocabulary* mpORBvocabulary;
 
     // Grid over the image to speed up feature matching
-    std::vector< std::vector <std::vector<size_t> > > mGrid;
+    std::vector<std::vector<std::vector<size_t> > > mGrid;
 
-    std::map<KeyFrame*,int> mConnectedKeyFrameWeights;
+    std::map<KeyFrame*, int> mConnectedKeyFrameWeights;
     std::vector<KeyFrame*> mvpOrderedConnectedKeyFrames;
     std::vector<int> mvOrderedWeights;
 

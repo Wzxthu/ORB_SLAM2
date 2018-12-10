@@ -136,6 +136,7 @@ void Map::clear()
     for (auto mspKeyFrame : mspKeyFrames)
         delete mspKeyFrame;
 
+    mspLandmarks.clear();
     mspMapPoints.clear();
     mspKeyFrames.clear();
     mnMaxKFid = 0;

@@ -170,39 +170,56 @@ void MapDrawer::DrawLandmarks()
     auto vpLandmarks = mpMap->GetAllLandmarks();
     for (const auto& pLandmark : vpLandmarks) {
         const auto dimension = pLandmark->GetDimension();
-        const auto w = dimension.edge12;
-        const auto h = dimension.edge18;
-        const auto z = dimension.edge13;
+        const auto w_2 = dimension.edge12 / 2;
+        const auto h_2 = dimension.edge18 / 2;
+        const auto z_2 = dimension.edge13 / 2;
 
         cv::Mat Twl = pLandmark->GetPoseInverse().t();
 
         glPushMatrix();
+        {
+            glMultMatrixf(Twl.ptr<GLfloat>(0));
 
-        glMultMatrixf(Twl.ptr<GLfloat>(0));
+            glLineWidth(mKeyFrameLineWidth);
+            glColor3f(1.0f, 0.0f, 0.0f);
+            glBegin(GL_LINES);
 
-        glLineWidth(mKeyFrameLineWidth);
-        glColor3f(1.0f, 0.0f, 0.0f);
-        glBegin(GL_LINES);
-        glVertex3f(0, 0, 0);
-        glVertex3f(w, h, z);
-        glVertex3f(0, 0, 0);
-        glVertex3f(w, -h, z);
-        glVertex3f(0, 0, 0);
-        glVertex3f(-w, -h, z);
-        glVertex3f(0, 0, 0);
-        glVertex3f(-w, h, z);
+            glVertex3f(-w_2, -h_2, -z_2);
+            glVertex3f(-w_2, -h_2, +z_2);
 
-        glVertex3f(w, h, z);
-        glVertex3f(w, -h, z);
+            glVertex3f(-w_2, -h_2, -z_2);
+            glVertex3f(-w_2, +h_2, -z_2);
 
-        glVertex3f(-w, h, z);
-        glVertex3f(-w, -h, z);
+            glVertex3f(-w_2, -h_2, -z_2);
+            glVertex3f(+w_2, -h_2, -z_2);
 
-        glVertex3f(-w, h, z);
-        glVertex3f(w, h, z);
+            glVertex3f(-w_2, -h_2, +z_2);
+            glVertex3f(-w_2, +h_2, +z_2);
 
-        glVertex3f(-w, -h, z);
-        glVertex3f(w, -h, z);
+            glVertex3f(-w_2, -h_2, +z_2);
+            glVertex3f(+w_2, -h_2, +z_2);
+
+            glVertex3f(-w_2, +h_2, -z_2);
+            glVertex3f(-w_2, +h_2, +z_2);
+
+            glVertex3f(-w_2, +h_2, -z_2);
+            glVertex3f(+w_2, +h_2, -z_2);
+
+            glVertex3f(+w_2, -h_2, -z_2);
+            glVertex3f(+w_2, -h_2, +z_2);
+
+            glVertex3f(+w_2, -h_2, -z_2);
+            glVertex3f(+w_2, +h_2, -z_2);
+
+            glVertex3f(-w_2, +h_2, +z_2);
+            glVertex3f(+w_2, +h_2, +z_2);
+
+            glVertex3f(+w_2, -h_2, +z_2);
+            glVertex3f(+w_2, +h_2, +z_2);
+
+            glVertex3f(+w_2, +h_2, -z_2);
+            glVertex3f(+w_2, +h_2, +z_2);
+        }
         glEnd();
 
         glPopMatrix();
