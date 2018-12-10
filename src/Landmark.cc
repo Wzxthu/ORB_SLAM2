@@ -18,11 +18,11 @@
  */
 
 #include "Landmark.h"
-#include <opencv2/core/eigen.hpp>
 #include "Converter.h"
 
 #include <mutex>
-#include <include/Landmark.h>
+
+#include <opencv2/core/eigen.hpp>
 
 using namespace std;
 using namespace cv;
@@ -64,9 +64,7 @@ void Landmark::SetPose(const Mat& Rlw, const Mat& tlw)
 void Landmark::SetDimensionNoLock(const Dimension3D& dimension)
 {
     unique_lock<mutex> lock(mMutexPose);
-    mCuboid.scale[0] = dimension.edge13;
-    mCuboid.scale[1] = dimension.edge12;
-    mCuboid.scale[2] = dimension.edge18;
+    mpCuboid->setScale(dimension.edge13, dimension.edge12, dimension.edge18);
     mDimension = dimension;
 }
 
@@ -82,7 +80,7 @@ void Landmark::SetPoseNoLock(const Mat& Tlw_)
     Rwl.copyTo(Twl.rowRange(0, 3).colRange(0, 3));
     Lw.copyTo(Twl.rowRange(0, 3).col(3));
 
-    mCuboid.pose = ORB_SLAM2::Converter::toSE3Quat(Twl);
+    mpCuboid->mPose = ORB_SLAM2::Converter::toSE3Quat(Twl);
 }
 
 void Landmark::SetPoseNoLock(const Mat& Rlw, const Mat& tlw)
@@ -94,10 +92,10 @@ void Landmark::SetPoseNoLock(const Mat& Rlw, const Mat& tlw)
     Twl = TFromRt(Rwl, Lw);
 }
 
-void Landmark::SetPoseAndDimension(const g2o::cuboid& Cuboid_)
+void Landmark::SetPoseAndDimension(const g2o::Cuboid& cuboid)
 {
-    Twl = ORB_SLAM2::Converter::toCvMat(Cuboid_.pose);
-    Eigen::Vector3d scale = Cuboid_.scale;
+    Twl = ORB_SLAM2::Converter::toCvMat(cuboid.mPose);
+    Eigen::Vector3d scale = cuboid.mScale;
     SetDimension(Dimension3D(scale[1], scale[2], scale[0]));
 }
 
@@ -167,8 +165,8 @@ Cuboid2D Landmark::Project(const cv::Mat& Tcw, const cv::Mat& K)
     return cuboid;
 }
 
-Landmark::Landmark(const Cuboid2D& proposal, const Rect& bbox, KeyFrame* pKF, const cv::Mat& invK, int classIdx)
-        :mClassIdx(classIdx)
+Landmark::Landmark(const Cuboid2D& proposal, const Object& object, KeyFrame* pKF, const cv::Mat& invK)
+        :mClassIdx(object.classIdx), mQuality(object.conf)
 {
     auto mapPoints = pKF->GetMapPointMatches();
 
@@ -179,7 +177,7 @@ Landmark::Landmark(const Cuboid2D& proposal, const Rect& bbox, KeyFrame* pKF, co
     for (auto mapPoint : mapPoints) {
         if (mapPoint != nullptr) {
             auto pos2D = pKF->mvKeysUn[mapPoint->GetObservations()[pKF]].pt;
-            if (Inside(pos2D, bbox)) {
+            if (Inside(pos2D, object.bbox)) {
                 auto worldPos = mapPoint->GetWorldPos();
                 float weight = exp(-Distance(centroid, pos2D));
                 worldAvgPos += worldPos * weight;
@@ -205,10 +203,10 @@ Landmark::Landmark(const Cuboid2D& proposal, const Rect& bbox, KeyFrame* pKF, co
     bboxCenter[pKF->mnFrameId] = proposal.GetCentroid();
 }
 
-g2o::cuboid Landmark::GetCuboid()
+const g2o::Cuboid* Landmark::GetCuboid()
 {
     unique_lock<mutex> lock(mMutexPose);
-    return mCuboid;
+    return mpCuboid;
 }
 
 }

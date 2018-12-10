@@ -24,6 +24,7 @@
 #include "Cuboid.h"
 #include "KeyFrame.h"
 #include "MapPoint.h"
+#include "ObjectDetector.h"
 
 #include <g2o_Object.h>
 
@@ -34,19 +35,17 @@ class KeyFrame;
 
 class Landmark {
 public:
-    std::unordered_map<int, cv::Point2f> bboxCenter;
-    g2o::VertexCuboid* cube_vertex;
-    float meas_quality;
-public:
     Landmark();
     Landmark(Landmark& other);
-    Landmark(const Cuboid2D& proposal, const cv::Rect& bbox, KeyFrame* pKF, const cv::Mat& invK, int classIdx);
+    Landmark(const Cuboid2D& proposal, const Object& object, KeyFrame* pKF, const cv::Mat& invK);
+
+    inline ~Landmark() { delete mpCuboid; }
 
     void SetDimension(const Dimension3D& dimension);
     void SetPose(const cv::Mat& Tlw_);
     void SetPose(const cv::Mat& Rlw, const cv::Mat& tlw);
     Dimension3D GetDimension();
-    void SetPoseAndDimension(const g2o::cuboid& Cuboid_);
+    void SetPoseAndDimension(const g2o::Cuboid& cuboid);
     cv::Mat GetPose();
     cv::Mat GetPoseInverse();
     cv::Mat GetRotation();
@@ -55,12 +54,26 @@ public:
     cv::Mat GetCentroid();
     cv::Point2f GetProjectedCentroid(const cv::Mat& Tcw, const cv::Mat& K);
 
-    g2o::cuboid GetCuboid();
+    const g2o::Cuboid* GetCuboid();
     Cuboid2D Project(const cv::Mat& Tcw, const cv::Mat& K);
+
+    EIGEN_MAKE_ALIGNED_OPERATOR_NEW
+
 public:
+    std::unordered_map<int, cv::Point2f> bboxCenter;
+    g2o::VertexCuboid* mCubeVertex;
+    float mQuality;
     int mClassIdx;
     int landmarkID;
+
 private:
+    void SetDimensionNoLock(const Dimension3D& dimension);
+    void SetPoseNoLock(const cv::Mat& Tlw_);
+    void SetPoseNoLock(const cv::Mat& Rlw, const cv::Mat& tlw);
+
+private:
+    // g2o pose and dimension.
+    g2o::Cuboid* mpCuboid = new g2o::Cuboid;  //cube_value
     // SE3 Pose.
     cv::Mat Tlw;
     cv::Mat Twl;
@@ -68,13 +81,8 @@ private:
     cv::Mat Lw;
     // Landmark dimension.
     Dimension3D mDimension;
-    g2o::cuboid mCuboid;  //cube_value
 
     std::mutex mMutexPose;
-
-    void SetDimensionNoLock(const Dimension3D& dimension);
-    void SetPoseNoLock(const cv::Mat& Tlw_);
-    void SetPoseNoLock(const cv::Mat& Rlw, const cv::Mat& tlw);
 };
 
 inline cv::Mat TFromRt(const cv::Mat& R, const cv::Mat& t)
