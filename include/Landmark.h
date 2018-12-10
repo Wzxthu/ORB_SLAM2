@@ -61,10 +61,9 @@ public:
 
 public:
     std::unordered_map<int, cv::Point2f> bboxCenter;
-    g2o::VertexCuboid* mCubeVertex;
     float mQuality;
     int mClassIdx;
-    int landmarkID;
+    int mnLandmarkId;
 
 private:
     void SetDimensionNoLock(const Dimension3D& dimension);
@@ -83,6 +82,8 @@ private:
     Dimension3D mDimension;
 
     std::mutex mMutexPose;
+
+    static int landmarkCnt;
 };
 
 inline cv::Mat TFromRt(const cv::Mat& R, const cv::Mat& t)
