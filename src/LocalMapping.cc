@@ -102,8 +102,7 @@ void LocalMapping::Run()
             mbAbortBA = false;
 
             if (!CheckNewKeyFrames() && !stopRequested()) {
-                // Local BA
-                // TODO: Add landmarks into BA.
+                // Local BA.
                 if (mpMap->KeyFramesInMap() > 2)
                     Optimizer::LocalBundleAdjustment(mpCurrentKeyFrame, &mbAbortBA, mpMap);
 
@@ -834,19 +833,20 @@ void LocalMapping::FindLandmarks()
         }
 
         // Find landmarks with respect to the detected objects.
+        float quality;
         auto proposal = FindBestProposal(bbox, segsInBbox, K,
                                          mShapeErrThresh, mShapeErrWeight, mAlignErrWeight,
                                          -M_PI_F, 0,
                                          10 * M_PI_F / 180, 10 * M_PI_F / 180,
                                          mpCurrentKeyFrame->mnFrameId, objId,
-                                         mpCurrentKeyFrame->mImColor, false, false);
+                                         mpCurrentKeyFrame->mImColor, false, false, &quality);
         if (!proposal.valid)
             continue;
 
         proposal.Draw(canvas, K);
 
         // Store the pose corresponding to best proposal into the keyframe.
-        auto pLandmark = make_shared<Landmark>(proposal, object, mpCurrentKeyFrame, invK);
+        auto pLandmark = make_shared<Landmark>(proposal, quality, object, mpCurrentKeyFrame, invK);
         mpCurrentKeyFrame->AddLandmark(pLandmark);
         mpMap->AddLandmark(pLandmark);
     }

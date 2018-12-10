@@ -37,7 +37,7 @@ class Landmark {
 public:
     Landmark();
     Landmark(Landmark& other);
-    Landmark(const Cuboid2D& proposal, const Object& object, KeyFrame* pKF, const cv::Mat& invK);
+    Landmark(const Cuboid2D& proposal, float proposalQuality, const Object& object, KeyFrame* pKF, const cv::Mat& invK);
 
     inline ~Landmark() { delete mpCuboid; }
 

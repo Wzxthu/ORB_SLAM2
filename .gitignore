@@ -33,3 +33,5 @@ cmake-build-release
 # Mac files
 **/*.icloud
 **/.DS_Store
+
+debug.txt

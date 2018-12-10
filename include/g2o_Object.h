@@ -204,7 +204,7 @@ public:
 class VertexCuboid : public BaseVertex<9, Cuboid>  // NOTE  this vertex stores object pose to world
 {
 public:
-    inline VertexCuboid() = default;;
+    inline VertexCuboid() = default;
 
     inline void setToOriginImpl() override { _estimate = Cuboid(); }
 
@@ -219,9 +219,9 @@ public:
         Eigen::Vector9d est;
         for (int i = 0; i < 9; i++)
             is >> est[i];
-        Cuboid Onecube;
-        Onecube.fromMinimalVector(est);
-        setEstimate(Onecube);
+        Cuboid cuboid;
+        cuboid.fromMinimalVector(est);
+        setEstimate(cuboid);
         return true;
     }
 
@@ -240,7 +240,7 @@ public:
 // camera -object 3D error
 class EdgeSE3Cuboid : public BaseBinaryEdge<9, Cuboid, VertexSE3Expmap, VertexCuboid> {
 public:
-    inline EdgeSE3Cuboid() = default;;
+    inline EdgeSE3Cuboid() = default;
 
     inline bool read(std::istream& is) override
     {
@@ -254,8 +254,8 @@ public:
 
     inline void computeError() override
     {
-        const auto* SE3Vertex = dynamic_cast<const VertexSE3Expmap*>(_vertices[0]);  //  world to camera pose
-        const auto* cuboidVertex = dynamic_cast<const VertexCuboid*>(_vertices[1]);       //  object pose to world
+        const auto* SE3Vertex = dynamic_cast<const VertexSE3Expmap*>(_vertices[0]); //  world to camera pose
+        const auto* cuboidVertex = dynamic_cast<const VertexCuboid*>(_vertices[1]); //  object pose to world
 
         SE3Quat cam_pose_Twc = SE3Vertex->estimate().inverse();
         const Cuboid& global_cube = cuboidVertex->estimate();
